@@ -1891,19 +1891,22 @@ def processScenes(segment):
 #                                           No errors making this tile, record it in our database
 #
 #
+                processingState = "ERROR"
                 if not tileErrorHasOccurred:
-                    logger.info('Insert tile into ARD_COMPLETED_TILES table: {0}'.format(tile_id))
-                    insert_cursor = connection.cursor()
-                    completed_tile_list = []
-                    processed_tiles_insert = "insert into ARD_COMPLETED_TILES (tile_id,CONTRIBUTING_SCENES,COMPLETE_TILE) values (:1,:2,:3)"
-                    sceneListStr = ",".join(contributingScenesforDB)
-                    row = (tile_id,sceneListStr,complete_tile)
-                    completed_tile_list.append(row)
-                    insert_cursor.bindarraysize = len(completed_tile_list)
-                    insert_cursor.prepare(processed_tiles_insert)
-                    insert_cursor.executemany(None, completed_tile_list)
-                    connection.commit()
-                    insert_cursor.close()
+                    processingState = "SUCCESS"
+
+                logger.info('Insert tile into ARD_COMPLETED_TILES table: {0}'.format(tile_id))
+                insert_cursor = connection.cursor()
+                completed_tile_list = []
+                processed_tiles_insert = "insert into ARD_COMPLETED_TILES (tile_id,CONTRIBUTING_SCENES,COMPLETE_TILE,PROCESSING_STATE) values (:1,:2,:3,:4)"
+                sceneListStr = ",".join(contributingScenesforDB)
+                row = (tile_id,sceneListStr,complete_tile,processingState)
+                completed_tile_list.append(row)
+                insert_cursor.bindarraysize = len(completed_tile_list)
+                insert_cursor.prepare(processed_tiles_insert)
+                insert_cursor.executemany(None, completed_tile_list)
+                connection.commit()
+                insert_cursor.close()
 
 
 
