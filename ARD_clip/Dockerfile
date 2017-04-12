@@ -4,7 +4,7 @@ MAINTAINER USGS EROS SDW http://eros.usgs.gov
 LABEL description="Create Tiles from Scene(s)"
 
 
-COPY ARD_Clip.py /usr/local/bin/
+COPY ARD_Clip_L457.py /usr/local/bin/
 COPY ARD_regionLU.py /usr/local/bin/
 COPY ARD_scenesForTilePathLU.py /usr/local/bin/
 COPY ARD_tilesForSceneLU.py /usr/local/bin/
