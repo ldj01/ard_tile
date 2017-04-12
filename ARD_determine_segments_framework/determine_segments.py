@@ -519,7 +519,7 @@ def determineSegments(jobs):
                completed_scene_list.append(row)
 
             # Build the Docker command.
-            cmd = ['ARD_Clip.py']
+            cmd = ['ARD_Clip_L457.py']
             if conf.satellite == 'L8':
                cmd = ['ARD_Clip_L8.py']
             cmd.extend(['"' + str(segment) + '"', conf.outdir + "/lta_incoming"])
