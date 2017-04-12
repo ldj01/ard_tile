@@ -28,6 +28,7 @@
 from ARD_HelperFunctions import logIt, appendToLog, reportToStdout, getARDName
 from osgeo import osr,ogr
 import xml.etree.ElementTree as ET
+import xml.dom.minidom as minidom
 import traceback
 
 
@@ -115,6 +116,18 @@ def buildMetadata2(debug, logger, statsTuple, cutLimits, tileID, \
         gm_instrument.text = 'TIRS-only'
     else:
         gm_instrument.text = 'TM'
+    
+                                                            # Level 1 Collection - new
+    gm_l1coll = ET.SubElement(outTileGlobal, 'level1_collection')
+    gm_l1coll.text = tileID[34:36]
+    
+                                                                # ARD Version - new
+    gm_ardVersion = ET.SubElement(outTileGlobal, 'ard_version')
+    gm_ardVersion.text = tileID[38:40]
+    
+                                                                    # Region - new
+    gm_region = ET.SubElement(outTileGlobal, 'region')
+    gm_region.text = tileID[5:7]
     
                                                         # acquisition date - use L2 scene
     for child in s1L2_root.find(namespace + 'global_metadata'):
@@ -317,10 +330,10 @@ def buildMetadata2(debug, logger, statsTuple, cutLimits, tileID, \
             bandElement.text = bandTag.text
 
             for child in bandTag:
-                newTag = (child.tag).replace(namespace, '')
-                childElement = ET.SubElement(bandElement, newTag, child.attrib)
+                newTag2 = (child.tag).replace(namespace, '')
+                childElement = ET.SubElement(bandElement, newTag2, child.attrib)
                 childElement.text = child.text
-                if (newTag == "bitmap_description"):
+                if (newTag2 == "bitmap_description"):
                     for bitmapChild in child:
                         bitmapTag = (bitmapChild.tag).replace(namespace, '')
                         bands_band_bitmap = ET.SubElement(childElement, bitmapTag, bitmapChild.attrib)
@@ -344,12 +357,51 @@ def buildMetadata2(debug, logger, statsTuple, cutLimits, tileID, \
     outRoot.attrib[namespace1Prefix] = namespace1URI
     outRoot.attrib["version"] = "1.0"
 
-    outTree = ET.ElementTree(outRoot)
+                                                                    # Add string indentation - Unfortunately, 
+                                                                    # this function produces extra carriage returns 
+                                                                    # after some elements...
+
+    prettyString = minidom.parseString(ET.tostring(outRoot)).toprettyxml(encoding="utf-8", indent="    ")
+    
+                                                                    # Write to temp file
     try:
-        outTree.write(metaFullName, xml_declaration=True, encoding="utf-8", \
-                            method="xml")
+        uglyFullName = metaFullName.replace(".xml", "_ugly.xml")
+        f = open(uglyFullName, "w")
+        f.write(prettyString.encode('utf-8'))
+        f.close()
+
     except:
-        logger.error('Error: Buildmetadata2: Error when writing')
+        logger.error('Error: Buildmetadata2: Error when writing temp file')
+        logger.error('        Error: {0}'.format(traceback.format_exc()))
+        return 'metadata ERROR'
+
+                                                                      # Looks like the minidom pretty print added some
+                                                                      # blank lines followed by CRLF.  The blank lines are
+                                                                      # of more than one length in our case.  Remove any
+                                                                      # blank lines.
+
+    try:
+        inMetafile = open(uglyFullName, "r")
+        outMetafile = open(metaFullName, "w")
+
+        for curLine in inMetafile:
+
+            allSpaces = True
+            for curChar in curLine:
+                if (curChar != '\x20') and (curChar != '\x0D') and (curChar != '\x0A'):
+                    allSpaces = False
+                    continue
+
+            if (allSpaces == False):
+                outMetafile.write(curLine)
+            #else:
+            #    print 'Found blank line'
+
+        inMetafile.close()
+        outMetafile.close()
+
+    except:
+        logger.error('Error: Buildmetadata2: Error when fixing file')
         logger.error('        Error: {0}'.format(traceback.format_exc()))
         return 'metadata ERROR'
 
@@ -414,16 +466,16 @@ def createLineageSection(debug, logger, tileID, appVersion, prodDate):
 
     lineageText = '<band fill_value="0" nsamps="5000" nlines="5000" data_type="UINT8" '
     lineageText += 'category="metadata" name="LINEAGEQA" product="scene_index" '
-    lineageText += 'source="level2">\n'
-    lineageText += '<short_name>TILEIDX</short_name>\n'
-    lineageText += '<long_name>index</long_name>\n'
-    lineageText += '<file_name>' + tileID + '_LINEAGEQA.tif</file_name>\n'
-    lineageText += '<pixel_size units="meters" y="30" x="30"/>\n'
-    lineageText += '<resample_method>none</resample_method>\n'
-    lineageText += '<data_units>index</data_units>\n'
-    lineageText += '<valid_range max="255.000000" min="0.000000"/>\n'
-#    lineageText += '<app_version>' + appVersion + '</app_version>\n'
-    lineageText += '<production_date>' + prodDate + '</production_date>\n'
+    lineageText += 'source="level2">'
+    lineageText += '<short_name>TILEIDX</short_name>'
+    lineageText += '<long_name>index</long_name>'
+    lineageText += '<file_name>' + tileID + '_LINEAGEQA.tif</file_name>'
+    lineageText += '<pixel_size units="meters" y="30" x="30"/>'
+    lineageText += '<resample_method>none</resample_method>'
+    lineageText += '<data_units>index</data_units>'
+    lineageText += '<valid_range max="255.000000" min="0.000000"/>'
+#    lineageText += '<app_version>' + appVersion + '</app_version>'
+    lineageText += '<production_date>' + prodDate + '</production_date>'
     lineageText += '</band>'
 
     return lineageText
@@ -608,35 +660,35 @@ def global_createProjInfo(debug, logger, cutLimits, region):
     
     prjStr = ''
     if (region == 'CU'):
-        prjStr += '<standard_parallel1>29.500000</standard_parallel1>\n'
-        prjStr += '<standard_parallel2>45.500000</standard_parallel2>\n'
-        prjStr += '<central_meridian>-96.000000</central_meridian>\n'
-        prjStr += '<origin_latitude>23.000000</origin_latitude>\n'
-        prjStr += '<false_easting>0.000000</false_easting>\n'
-        prjStr += '<false_northing>0.000000</false_northing>\n'
+        prjStr += '<standard_parallel1>29.500000</standard_parallel1>'
+        prjStr += '<standard_parallel2>45.500000</standard_parallel2>'
+        prjStr += '<central_meridian>-96.000000</central_meridian>'
+        prjStr += '<origin_latitude>23.000000</origin_latitude>'
+        prjStr += '<false_easting>0.000000</false_easting>'
+        prjStr += '<false_northing>0.000000</false_northing>'
     elif (region == 'HI'):
-        prjStr += '<standard_parallel1>8.000000</standard_parallel1>\n'
-        prjStr += '<standard_parallel2>18.000000</standard_parallel2>\n'
-        prjStr += '<central_meridian>-157.000000</central_meridian>\n'
-        prjStr += '<origin_latitude>3.000000</origin_latitude>\n'
-        prjStr += '<false_easting>0.000000</false_easting>\n'
-        prjStr += '<false_northing>0.000000</false_northing>\n'
+        prjStr += '<standard_parallel1>8.000000</standard_parallel1>'
+        prjStr += '<standard_parallel2>18.000000</standard_parallel2>'
+        prjStr += '<central_meridian>-157.000000</central_meridian>'
+        prjStr += '<origin_latitude>3.000000</origin_latitude>'
+        prjStr += '<false_easting>0.000000</false_easting>'
+        prjStr += '<false_northing>0.000000</false_northing>'
     else:
-        prjStr += '<standard_parallel1>55.000000</standard_parallel1>\n'
-        prjStr += '<standard_parallel2>65.000000</standard_parallel2>\n'
-        prjStr += '<central_meridian>-154.000000</central_meridian>\n'
-        prjStr += '<origin_latitude>50.000000</origin_latitude>\n'
-        prjStr += '<false_easting>0.000000</false_easting>\n'
-        prjStr += '<false_northing>0.000000</false_northing>\n'
+        prjStr += '<standard_parallel1>55.000000</standard_parallel1>'
+        prjStr += '<standard_parallel2>65.000000</standard_parallel2>'
+        prjStr += '<central_meridian>-154.000000</central_meridian>'
+        prjStr += '<origin_latitude>50.000000</origin_latitude>'
+        prjStr += '<false_easting>0.000000</false_easting>'
+        prjStr += '<false_northing>0.000000</false_northing>'
     
                                                                # build the new tags
-    blurb = '<projection_information units="meters" datum="WGS84" projection="AEA">\n'
+    blurb = '<projection_information units="meters" datum="WGS84" projection="AEA">'
     blurb += '<corner_point y="' + '{:0.6f}'.format(cutTop) 
-    blurb += '" x="' + '{:0.6f}'.format(cutLeft)  + '" location="UL"/>\n'
+    blurb += '" x="' + '{:0.6f}'.format(cutLeft)  + '" location="UL"/>'
     blurb += '<corner_point y="' + '{:0.6f}'.format(cutBottom) 
-    blurb += '" x="' + '{:0.6f}'.format(cutRight)  + '" location="LR"/>\n'
-    blurb += '<grid_origin>CORNER</grid_origin>\n' 
-    blurb += '<albers_proj_params>\n' + prjStr + '</albers_proj_params>\n'
-    blurb += '</projection_information>\n'
+    blurb += '" x="' + '{:0.6f}'.format(cutRight)  + '" location="LR"/>'
+    blurb += '<grid_origin>CORNER</grid_origin>' 
+    blurb += '<albers_proj_params>' + prjStr + '</albers_proj_params>'
+    blurb += '</projection_information>'
     
     return blurb
