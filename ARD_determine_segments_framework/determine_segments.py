@@ -369,7 +369,7 @@ class Config():
         if args.config_file is not None:
             config_file = args.config_file
         else:
-            config_file = '/home/doerr/ARD_determine_segments.conf'
+            config_file = '/home/tilest/ARD_determine_segments.conf'
 
         # Set the configuration values.
         #config_file = 'ARD_determine_segments.conf'
