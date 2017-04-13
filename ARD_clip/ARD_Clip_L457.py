@@ -122,6 +122,7 @@ def readConfig():
     logger.info("readConfig")
     Config = ConfigParser.ConfigParser()
     if len(Config.read("ARD_Clip.conf")) > 0:
+        logger.info("Found ARD_Clip.conf")
         section = 'SectionOne'
         if Config.has_section(section):
            if Config.has_option(section, 'dbconnect'):
@@ -130,7 +131,7 @@ def readConfig():
            if Config.has_option(section, 'version'):
               global version
               version = Config.get(section, 'version')
-              #logger.info("version: {0}".format(version))
+              logger.info("version: {0}".format(version))
            if Config.has_option(section, 'soap_envelope_template'):
               global soap_envelope
               soap_envelope = Config.get(section, 'soap_envelope_template')
@@ -1932,6 +1933,7 @@ if __name__ == "__main__":
 
 
     logger = setup_logging()
+    logger.info("current working directory: {0}".format(os.getcwd()))
 
     readConfig()
 
