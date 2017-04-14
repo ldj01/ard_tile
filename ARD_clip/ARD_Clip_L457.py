@@ -252,10 +252,13 @@ def processScenes(segment):
          
                 contributingScenes = []
                 contributingScenesforDB = []
+                hsmFileNames = []
                 for pathRow in scenesForTilePath:
                     # LE07_L2TP_026028_19990709_20161112_01_A1
                     contrib_scene_id = targzName[:10] + pathRow[0] + pathRow[1] + targzName[16:25]
                     logger.info("          Contributing scene: {0}".format(contrib_scene_id))
+                    hsm_wildcard_name = "/" + pathRow[0].lstrip("0") + "/" + pathRow[1].lstrip("0") + "/" + targzName[:4] + pathRow[0] + pathRow[1] + targzName[17:25] + "*.tar.gz"
+                    logger.info("          HSM wildcard name: {0}".format(hsm_wildcard_name))
 
                     SQL="select file_location, scene_id from ARD_PROCESSED_SCENES where scene_id like '" + contrib_scene_id + "%'"
                     select_cursor = connection.cursor()
@@ -269,10 +272,25 @@ def processScenes(segment):
                     if len(contrib_scene_rec) > 0:
                         contributingScenes.append(contrib_scene_rec[0][0])
                         contributingScenesforDB.append(contrib_scene_rec[0][1])
+                    else:
+                        hsmFileNames.append(hsm_wildcard_name)
 
                 complete_tile = 'Y'
+                parsed_list = contributingScenes[0].rsplit("/",3)
                 if len(contributingScenes) != len(scenesForTilePath):
-                    complete_tile = 'N'
+
+                    # see if contributing file exists on hsm
+                    fileFoundCtr = 0
+                    for hsm_wildcard_name in hsmFileNames:
+                       hsm_full_wildcard = parsed_list[0] + hsm_wildcard_name
+                       fullName = glob.glob(hsm_full_wildcard)
+                       if len(fullName) > 0:
+                          fileFoundCtr = fileFoundCtr + 1
+                          contributingScenes.append(fullName[0])
+                          contributingScenesforDB.append(hsm_wildcard_name)
+
+                    if len(hsmFileNames) != fileFoundCtr:    
+                       complete_tile = 'N'
 
                 logger.info("Contributing scenes: {0}".format(contributingScenes))
 
