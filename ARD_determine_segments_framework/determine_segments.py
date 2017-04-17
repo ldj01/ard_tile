@@ -196,11 +196,11 @@ class Job():
         input_volume.container_path = conf.indir
         input_volume.mode = 2  # mesos_pb2.Volume.Mode.RO
 
-        config_volume = container.volumes.add()
-        config_volume.host_path = conf.confdir
-        #config_volume.container_path = conf.confdir
-        config_volume.container_path = '/mnt/mesos/sandbox/ARD_Clip.conf'
-        config_volume.mode = 2  # mesos_pb2.Volume.Mode.RO
+#        config_volume = container.volumes.add()
+#        config_volume.host_path = conf.confdir
+#        #config_volume.container_path = conf.confdir
+#        config_volume.container_path = '/mnt/mesos/sandbox/ARD_Clip.conf'
+#        config_volume.mode = 2  # mesos_pb2.Volume.Mode.RO
 
         localtime_volume = container.volumes.add()
         localtime_volume.host_path = '/etc/localtime'
@@ -243,6 +243,8 @@ class Job():
         # Add the docker uri for logging into the remote repository
         if conf.docker_pkg:
             command.uris.add().value = conf.docker_pkg
+
+        command.uris.add().value = conf.confdir
 
         # The MergeFrom allows to create an object then to use this object
         # in an other one. Here we use the new CommandInfo object and specify
