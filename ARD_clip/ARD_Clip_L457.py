@@ -184,6 +184,7 @@ def processScenes(segment):
     process_date = currentTime.strftime('%Y%m%d')
     sceneCtr = 0
     for scene_record in segment:
+        additionalSceneCleanUpList = []
                              # Current scene to process
         #reportToStdout scene_record
         targzName = scene_record[4] + '.tar.gz'
@@ -253,6 +254,7 @@ def processScenes(segment):
                 contributingScenes = []
                 contributingScenesforDB = []
                 hsmFileNames = []
+                hsmSceneID = []
                 for pathRow in scenesForTilePath:
                     # LE07_L2TP_026028_19990709_20161112_01_A1
                     contrib_scene_id = targzName[:10] + pathRow[0] + pathRow[1] + targzName[16:25]
@@ -274,6 +276,8 @@ def processScenes(segment):
                         contributingScenesforDB.append(contrib_scene_rec[0][1])
                     else:
                         hsmFileNames.append(hsm_wildcard_name)
+                        hsmSceneID.append(contrib_scene_id + '_' + scene_id_parts[4] + '_' + scene_id_parts[5] + '_' + scene_id_parts[6])
+
 
                 complete_tile = 'Y'
                 parsed_list = contributingScenes[0].rsplit("/",3)
@@ -281,13 +285,16 @@ def processScenes(segment):
 
                     # see if contributing file exists on hsm
                     fileFoundCtr = 0
+                    loopCtr = 0
                     for hsm_wildcard_name in hsmFileNames:
                        hsm_full_wildcard = parsed_list[0] + hsm_wildcard_name
                        fullName = glob.glob(hsm_full_wildcard)
                        if len(fullName) > 0:
                           fileFoundCtr = fileFoundCtr + 1
                           contributingScenes.append(fullName[0])
-                          contributingScenesforDB.append(hsm_wildcard_name)
+                          contributingScenesforDB.append(hsmSceneID[loopCtr])
+                          additionalSceneCleanUpList.append(hsmSceneID[loopCtr])
+                       loopCtr = loopCtr + 1
 
                     if len(hsmFileNames) != fileFoundCtr:    
                        complete_tile = 'N'
@@ -1929,6 +1936,11 @@ def processScenes(segment):
 
 
 
+
+        # cleanup untarred scene directories not in segment
+        for additionalScene in additionalSceneCleanUpList:
+           if (os.path.isdir(additionalScene)):
+              shutil.rmtree(additionalScene)
 
         # increment segment scene counter
         sceneCtr = sceneCtr + 1
