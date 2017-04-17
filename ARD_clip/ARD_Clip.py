@@ -122,6 +122,7 @@ def readConfig():
     logger.info("readConfig")
     Config = ConfigParser.ConfigParser()
     if len(Config.read("ARD_Clip.conf")) > 0:
+        logger.info("Found ARD_Clip.conf")
         section = 'SectionOne'
         if Config.has_section(section):
            if Config.has_option(section, 'dbconnect'):
@@ -130,7 +131,7 @@ def readConfig():
            if Config.has_option(section, 'version'):
               global version
               version = Config.get(section, 'version')
-              #logger.info("version: {0}".format(version))
+              logger.info("version: {0}".format(version))
            if Config.has_option(section, 'soap_envelope_template'):
               global soap_envelope
               soap_envelope = Config.get(section, 'soap_envelope_template')
@@ -183,6 +184,7 @@ def processScenes(segment):
     process_date = currentTime.strftime('%Y%m%d')
     sceneCtr = 0
     for scene_record in segment:
+        additionalSceneCleanUpList = []
                              # Current scene to process
         #reportToStdout scene_record
         targzName = scene_record[4] + '.tar.gz'
@@ -251,10 +253,14 @@ def processScenes(segment):
          
                 contributingScenes = []
                 contributingScenesforDB = []
+                hsmFileNames = []
+                hsmSceneID = []
                 for pathRow in scenesForTilePath:
                     # LE07_L2TP_026028_19990709_20161112_01_A1
                     contrib_scene_id = targzName[:10] + pathRow[0] + pathRow[1] + targzName[16:25]
                     logger.info("          Contributing scene: {0}".format(contrib_scene_id))
+                    hsm_wildcard_name = "/" + pathRow[0].lstrip("0") + "/" + pathRow[1].lstrip("0") + "/" + targzName[:4] + pathRow[0] + pathRow[1] + targzName[17:25] + "*.tar.gz"
+                    logger.info("          HSM wildcard name: {0}".format(hsm_wildcard_name))
 
                     SQL="select file_location, scene_id from ARD_PROCESSED_SCENES where scene_id like '" + contrib_scene_id + "%'"
                     select_cursor = connection.cursor()
@@ -268,10 +274,30 @@ def processScenes(segment):
                     if len(contrib_scene_rec) > 0:
                         contributingScenes.append(contrib_scene_rec[0][0])
                         contributingScenesforDB.append(contrib_scene_rec[0][1])
+                    else:
+                        hsmFileNames.append(hsm_wildcard_name)
+                        hsmSceneID.append(contrib_scene_id + '_' + scene_id_parts[4] + '_' + scene_id_parts[5] + '_' + scene_id_parts[6])
+
 
                 complete_tile = 'Y'
+                parsed_list = contributingScenes[0].rsplit("/",3)
                 if len(contributingScenes) != len(scenesForTilePath):
-                    complete_tile = 'N'
+
+                    # see if contributing file exists on hsm
+                    fileFoundCtr = 0
+                    loopCtr = 0
+                    for hsm_wildcard_name in hsmFileNames:
+                       hsm_full_wildcard = parsed_list[0] + hsm_wildcard_name
+                       fullName = glob.glob(hsm_full_wildcard)
+                       if len(fullName) > 0:
+                          fileFoundCtr = fileFoundCtr + 1
+                          contributingScenes.append(fullName[0])
+                          contributingScenesforDB.append(hsmSceneID[loopCtr])
+                          additionalSceneCleanUpList.append(hsmSceneID[loopCtr])
+                       loopCtr = loopCtr + 1
+
+                    if len(hsmFileNames) != fileFoundCtr:    
+                       complete_tile = 'N'
 
                 logger.info("Contributing scenes: {0}".format(contributingScenes))
 
@@ -1911,6 +1937,11 @@ def processScenes(segment):
 
 
 
+        # cleanup untarred scene directories not in segment
+        for additionalScene in additionalSceneCleanUpList:
+           if (os.path.isdir(additionalScene)):
+              shutil.rmtree(additionalScene)
+
         # increment segment scene counter
         sceneCtr = sceneCtr + 1
         # End for each segment loop
@@ -1932,6 +1963,7 @@ if __name__ == "__main__":
 
 
     logger = setup_logging()
+    logger.info("current working directory: {0}".format(os.getcwd()))
 
     readConfig()
 
