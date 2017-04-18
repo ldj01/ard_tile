@@ -228,7 +228,7 @@ class Job():
         task = mesos_pb2.TaskInfo()
         task.task_id.value = self.job_id
         task.slave_id.value = offer.slave_id.value
-        task.name = 'ARD Clip ' + self.job_id
+        task.name = 'ARD Clip ' + self.job_id.replace('-', ' ')
 
         # Add the container
         task.container.MergeFrom(container)
@@ -503,7 +503,7 @@ def determineSegments(jobs):
 
 
       completed_scene_list = []
-      processed_scenes_insert = "insert into ARD_PROCESSED_SCENES (scene_id,file_location) values (:1,:2)"
+      processed_scenes_insert = "insert /*+ ignore_row_on_dupkey_index(ARD_PROCESSED_SCENES, SCENE_ID_PK) */ into ARD_PROCESSED_SCENES (scene_id,file_location) values (:1,:2)"
       segmentAboveThreshold = False
       # Start segment processing
       # 1. Loop through segments_list and pass segment (consec scene list) to 
@@ -522,13 +522,17 @@ def determineSegments(jobs):
 
             # Build the Docker command.
             cmd = ['ARD_Clip_L457.py']
-            if conf.satellite == 'L8':
+            if segment[0][4][:4] == 'LC08':
                cmd = ['ARD_Clip_L8.py']
+
+
             cmd.extend(['"' + str(segment) + '"', conf.outdir + "/lta_incoming"])
 
             # Compile the job information.
             job = Job()
-            job_id = id_generator(10)
+            #job_id = id_generator(10)
+            # job_id = path, first row, last row, acq_date
+            job_id = str(segment[0][1]).zfill(3) + '-' + str(segment[0][2]).zfill(3) + '-' + str(segment[len(segment)-1][2]).zfill(3) + '-' + segment[0][0]
             job.cpus = conf.cpus
             job.disk = conf.disk
             job.mem = conf.memory

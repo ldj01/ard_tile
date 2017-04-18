@@ -244,7 +244,7 @@ def determineSegments():
 
 
       completed_scene_list = []
-      processed_scenes_insert = "insert into ARD_PROCESSED_SCENES (scene_id,file_location) values (:1,:2)"
+      processed_scenes_insert = "insert /*+ ignore_row_on_dupkey_index(ARD_PROCESSED_SCENES, SCENE_ID_PK) */ into ARD_PROCESSED_SCENES (scene_id,file_location) values (:1,:2)"
       segmentAboveThreshold = False
       # Start segment processing
       # 1. Loop through segments_list and pass segment (consec scene list) to 
