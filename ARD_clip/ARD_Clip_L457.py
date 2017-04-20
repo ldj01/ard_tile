@@ -1573,7 +1573,7 @@ def processScenes(segment):
                                                         # just for when we create the histogram. 
                                                         #
       
-                qa256Cmd = gdaltranslateLoc + ' -ot "Byte" -a_nodata 0 ' + pixelQATile + ' ' + pixelQATile256
+                qa256Cmd = gdaltranslateLoc + ' -ot "Byte" -a_nodata 0 -unscale ' + pixelQATile + ' ' + pixelQATile256
                 if (debug):
                     logger.info('        > qa256Cmd: {0}'.format(qa256Cmd))
                 try:
@@ -1608,7 +1608,6 @@ def processScenes(segment):
                     logger.info('        # pixels Snow: {0}'.format(str(statsTuple[3])))
                     logger.info('        # pixels CloudShadow: {0}'.format(str(statsTuple[4])))
                     logger.info('        # pixels CloudCover: {0}'.format(str(statsTuple[5])))
-                    logger.info('        # pixels Combo: {0}'.format(str(statsTuple[6])))
       
                                                         #
                                                         # Create the tile metadata file
