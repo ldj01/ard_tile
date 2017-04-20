@@ -272,8 +272,11 @@ def buildMetadata2(debug, logger, statsTuple, cutLimits, tileID, \
         request_id = getL1Value(debug, logger, L1Tuple[i], "REQUEST_ID")
         scene_id = getL1Value(debug, logger, L1Tuple[i], "LANDSAT_SCENE_ID")
         elev_src = getL1Value(debug, logger, L1Tuple[i], "ELEVATION_SOURCE")
-        sensor_mode = getL1Value(debug, logger, L1Tuple[i], "SENSOR_MODE")
-        ephemeris_type = getL1Value(debug, logger, L1Tuple[i], "EPHEMERIS_TYPE")
+
+        if (satelliteStr != '8'):
+            sensor_mode = getL1Value(debug, logger, L1Tuple[i], "SENSOR_MODE")
+            ephemeris_type = getL1Value(debug, logger, L1Tuple[i], "EPHEMERIS_TYPE")
+
         cpf_name = getL1Value(debug, logger, L1Tuple[i], "CPF_NAME")
         geometric_rmse_model = getL1Value(debug, logger, L1Tuple[i], "GEOMETRIC_RMSE_MODEL")
         geometric_rmse_model_x = getL1Value(debug, logger, L1Tuple[i], "GEOMETRIC_RMSE_MODEL_X")
@@ -306,10 +309,13 @@ def buildMetadata2(debug, logger, statsTuple, cutLimits, tileID, \
             if (newTag == 'product_id'):
                 outGeneric = ET.SubElement(outSceneGlobal, 'elevation_source')
                 outGeneric.text = elev_src
-                outGeneric = ET.SubElement(outSceneGlobal, 'sensor_mode')
-                outGeneric.text = sensor_mode
-                outGeneric = ET.SubElement(outSceneGlobal, 'ephemeris_type')
-                outGeneric.text = ephemeris_type
+
+                if (satelliteStr != '8'):
+                    outGeneric = ET.SubElement(outSceneGlobal, 'sensor_mode')
+                    outGeneric.text = sensor_mode
+                    outGeneric = ET.SubElement(outSceneGlobal, 'ephemeris_type')
+                    outGeneric.text = ephemeris_type
+
                 outGeneric = ET.SubElement(outSceneGlobal, 'cpf_name')
                 outGeneric.text = cpf_name
 
@@ -442,7 +448,7 @@ def createPixelTypeTuple(debug, logger, longsTuple):
     numNonFillPixels = 25000000.0 - longsTuple[0]
     
                                                  # Calculate Cloud Cover
-    cloudLong = (longsTuple[5] + longsTuple[6]) / numNonFillPixels * 100.0
+    cloudLong = longsTuple[5] / numNonFillPixels * 100.0
     cloudStr = '{:0.4f}'.format(cloudLong)
 
                                                  # Calculate Cloud Shadow
@@ -501,16 +507,12 @@ def fixTileBand2(debug, logger, tileID, filenameCrosswalk, \
     sampsBeginPos = bandTag.find("nsamps")
     sampsEndPos = bandTag.find('"', sampsBeginPos + 8)
     oldSamps = bandTag[sampsBeginPos:sampsEndPos+1]
-    if (debug):
-        logger.info('      > meta > fixTileBand > oldSamps: {0}'.format(oldSamps))
     newSamps = 'nsamps="5000"'
     
                                                                  # find nlines within the <band> tag
     linesBeginPos = bandTag.find("nlines")
     linesEndPos = bandTag.find('"', linesBeginPos + 8)
     oldLines = bandTag[linesBeginPos:linesEndPos+1]
-    if (debug):
-        logger.info('      > meta > fixTileBand > oldLines: {0}'.format(oldLines))
     newLines = 'nlines="5000"'
     
                                                                  # L2 band names need to be renamed in two places -
@@ -518,8 +520,6 @@ def fixTileBand2(debug, logger, tileID, filenameCrosswalk, \
     nameBeginPos = bandTag.find("name")
     nameEndPos = bandTag.find('"', nameBeginPos + 7)
     oldBandName = bandTag[nameBeginPos:nameEndPos+1]
-    if (debug):
-        logger.info('      > meta > fixTileBand > oldBandName: {0}'.format(oldBandName))
     nameOnly = bandTag[nameBeginPos+6:nameEndPos]
     newName = 'name="' + getARDName(nameOnly, filenameCrosswalk) + '"'
     
@@ -528,16 +528,12 @@ def fixTileBand2(debug, logger, tileID, filenameCrosswalk, \
     endFilePos = bandTag.find('</file_name>', startFilePos)
     oldFileText = bandTag[startFilePos+11:endFilePos]
     newFileText = tileID + '_' + getARDName(nameOnly, filenameCrosswalk) + '.tif'
-    if (debug):
-        logger.info('      > meta > fixTileBand > oldFilename: {0}'.format(oldFileText))
     
                                                                  # Modify <production_date>
     startDatePos = bandTag.find('<production_date>', 0)
     endDatePos = bandTag.find('</production_date>', startDatePos)
     oldDateText = bandTag[startDatePos:endDatePos+18]
     newDateText = '<production_date>' + productionDateTime + '</production_date>'
-    if (debug):
-        logger.info('      > meta > fixTileBand > oldDate: {0}'.format(oldDateText))
     
                                                                  # perform the substitutions in the <band> tag
     bandTag = bandTag.replace(oldSamps, newSamps)
