@@ -447,9 +447,7 @@ def id_generator(size=6):
 def determineSegments(jobs):
 
    SQL = conf.segment_query
-   #SQL="select trunc(nvl(b.DATE_ACQUIRED,c.DATE_ACQUIRED)) DATE_ACQUIRED, nvl(b.WRS_PATH,c.WRS_PATH) WRS_PATH, nvl(b.WRS_ROW,c.WRS_ROW) WRS_ROW, a.L2_LOCATION || '/' || regexp_substr(a.LANDSAT_PRODUCT_ID, '[^_]+',1) || regexp_substr(a.LANDSAT_PRODUCT_ID, '[^_]+',1,3) || regexp_substr(a.LANDSAT_PRODUCT_ID, '[^_]+',1,4) || regexp_substr(a.LANDSAT_PRODUCT_ID, '[^_]+',1,6) || regexp_substr(a.LANDSAT_PRODUCT_ID, '[^_]+',1,7) || '-SC*.tar.gz' file_loc, a.LANDSAT_PRODUCT_ID LANDSAT_PRODUCT_ID from l2_albers_inventory a left join etm_scene_inventory@inv_l2_bridge_link b on a.landsat_scene_id = b.landsat_scene_id and b.vcid = 1 left join tm_scene_inventory@inv_l2_bridge_link c on a.landsat_scene_id = c.landsat_scene_id where a.LANDSAT_PRODUCT_ID not in (select scene_id from ARD_PROCESSED_SCENES) order by DATE_ACQUIRED, WRS_PATH, WRS_ROW"
  
-   logger.info('Segment query: {0}'.format(SQL))
 
 
    try:
@@ -520,6 +518,9 @@ def determineSegments(jobs):
                row = (scene_record[4], scene_record[3])
                completed_scene_list.append(row)
 
+               # set 'BLANK' to 'INQUEUE' processing status
+               set_record_to_inqueue(scene_record[4])
+
             # Build the Docker command.
             cmd = ['ARD_Clip_L457.py']
             if segment[0][4][:4] == 'LC08':
@@ -555,8 +556,47 @@ def determineSegments(jobs):
    else:
       logger.info("There are no scenes ready to process.")
 
+
    cursor.close()
    connection.close()
+   return SUCCESS
+
+def set_record_to_inqueue(scene_id):
+
+   updatesql = "update ARD_PROCESSED_SCENES set PROCESSING_STATE = 'INQUEUE' where scene_id = '" + scene_id + "'"
+
+   connection2 = None
+
+   try:
+      connection2 = cx_Oracle.connect(l2_db_con)
+   except:
+      logger.error("Unable to connect to the database.")
+      return ERROR
+ 
+   cursor = connection2.cursor()
+   cursor.execute(updatesql)
+   cursor.close()
+   connection2.commit()
+   connection2.close()
+
+   return SUCCESS
+
+def reset_records():
+
+   updatesql = "update ARD_PROCESSED_SCENES set PROCESSING_STATE = 'BLANK' where PROCESSING_STATE in ('INWORK','INQUEUE')"
+
+   try:
+      connection = cx_Oracle.connect(l2_db_con)
+   except:
+      logger.error("Unable to connect to the database.")
+      return ERROR
+ 
+   cursor = connection.cursor()
+   cursor.execute(updatesql)
+   cursor.close()
+   connection.commit()
+   connection.close()
+
    return SUCCESS
 
 # Main processing block
@@ -575,7 +615,10 @@ if __name__ == "__main__":
     logger.info('******************Start************')
     logger.info('             DB connection: {0}'.format(l2_db_con))
     logger.info("             MinSenesPerSeg: {0}".format(minscenesperseg))
+    logger.info('             Segment query: {0}'.format(conf.segment_query))
 
+    # reset any 'INWORK' and 'INQUEUE' to 'BLANK' processing status
+    reset_records()
 
     # Establish framework, executor, and authentication credentials
     # information.
