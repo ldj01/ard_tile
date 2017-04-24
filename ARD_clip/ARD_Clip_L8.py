@@ -186,6 +186,15 @@ def processScenes(segment):
     process_date = currentTime.strftime('%Y%m%d')
     sceneCtr = 0
     for scene_record in segment:
+
+        # update PROCESSING_STATE in ARD_PROCESSED_SCENES to 'INWORK'
+        updatesql = "update ARD_PROCESSED_SCENES set PROCESSING_STATE = 'INWORK' where scene_id = '" + scene_record[4] + "'"
+        update_cursor = connection.cursor()
+        update_cursor.execute(updatesql)
+        connection.commit()
+        update_cursor.close()
+        logger.info("Scene {0} is INWORK.".format(scene_record[4]))
+
         additionalSceneCleanUpList = []
                              # Current scene to process
         #reportToStdout scene_record
@@ -1616,12 +1625,12 @@ def processScenes(segment):
                     continue
       
                                                         # Create an 8bit mask with only those pixels 
-                                                        # that have High Cloud Confidence.  Both bits
-                                                        # 6 and 7 must be set in the Lower Bit file that
-                                                        # we just created.  This means the pixel
-                                                        # values are >= 192
+                                                        # that have High Cloud Confidence.  Bit 5
+                                                        # must be set in the Lower Bit file that
+                                                        # we just created. 
 
-                calcExpression = ' --calc="(A>=192)"'
+
+                calcExpression = ' --calc="bitwise_and(A, 32)"'
                 pqaCloudMaskCmd = pythonLoc + ' ' + gdalcalcLoc + ' -A ' + pqaLowerBits + \
                                                ' --outfile ' + pqaCloudMask + calcExpression + ' --type="Byte" --NoDataValue=255'
                 if (debug):
@@ -1642,7 +1651,7 @@ def processScenes(segment):
                                                         # counted when calculating the cloud cover 
                                                         # percentage for the tile.
 
-                calcExpression = ' --calc="logical_or((A==1),(B==1))"'
+                calcExpression = ' --calc="logical_or((A==1),(B==32))"'
                 pqaCloudCirrusMaskCmd = pythonLoc + ' ' + gdalcalcLoc + ' -A ' + pqaCirrusMask + \
                                                        ' -B ' + pqaCloudMask + ' --outfile ' + pqaCloudCirrusMask + \
                                                        calcExpression + ' --type="Byte" --NoDataValue=255'
@@ -2056,6 +2065,14 @@ def processScenes(segment):
 
 
 
+
+        # update PROCESSING_STATE in ARD_PROCESSED_SCENES to 'COMPLETE'
+        updatesql = "update ARD_PROCESSED_SCENES set PROCESSING_STATE = 'COMPLETE' where scene_id = '" + scene_record[4] + "'"
+        update_cursor = connection.cursor()
+        update_cursor.execute(updatesql)
+        connection.commit()
+        update_cursor.close()
+        logger.info("Scene {0} is COMPLETE.".format(scene_record[4]))
 
         # cleanup untarred scene directories not in segment
         for additionalScene in additionalSceneCleanUpList:

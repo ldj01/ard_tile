@@ -184,6 +184,15 @@ def processScenes(segment):
     process_date = currentTime.strftime('%Y%m%d')
     sceneCtr = 0
     for scene_record in segment:
+
+        # update PROCESSING_STATE in ARD_PROCESSED_SCENES to 'INWORK'
+        updatesql = "update ARD_PROCESSED_SCENES set PROCESSING_STATE = 'INWORK' where scene_id = '" + scene_record[4] + "'"
+        update_cursor = connection.cursor()
+        update_cursor.execute(updatesql)
+        connection.commit()
+        update_cursor.close()
+        logger.info("Scene {0} is INWORK.".format(scene_record[4]))
+
         additionalSceneCleanUpList = []
                              # Current scene to process
         #reportToStdout scene_record
@@ -1935,6 +1944,14 @@ def processScenes(segment):
 
 
 
+
+        # update PROCESSING_STATE in ARD_PROCESSED_SCENES to 'COMPLETE'
+        updatesql = "update ARD_PROCESSED_SCENES set PROCESSING_STATE = 'COMPLETE' where scene_id = '" + scene_record[4] + "'"
+        update_cursor = connection.cursor()
+        update_cursor.execute(updatesql)
+        connection.commit()
+        update_cursor.close()
+        logger.info("Scene {0} is COMPLETE.".format(scene_record[4]))
 
         # cleanup untarred scene directories not in segment
         for additionalScene in additionalSceneCleanUpList:
