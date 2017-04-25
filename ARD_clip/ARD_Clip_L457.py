@@ -1756,78 +1756,78 @@ def processScenes(segment):
       #                                                       Create the browse file for EE
       #
       #
-                logger.info('Start browse creation')
-                if (tileErrorHasOccurred):
-                    continue
-
-                                                                # the browseList was filled up in the 'Band Type 1' section
-                for browseBand in browseList:
-                    if ('TAB5' in browseBand):
-                        redBand = browseBand
-                    elif ('TAB4' in browseBand):
-                        grnBand = browseBand
-                    else:
-                        bluBand = browseBand
-      
-                                                                # merge r,g,b bands
-                brw1FileName = tile_id + '_brw1.tif'
-                brw1FullName = os.path.join(tileDir, brw1FileName)
-                browseCmd1 = pythonLoc + ' ' + gdalmergeLoc + ' ' + "-o " + brw1FullName + \
-                                       ' -separate ' + os.path.join(tileDir, redBand) + ' ' + \
-                                      os.path.join(tileDir, grnBand) + ' ' + os.path.join(tileDir, bluBand)
-                if (debug):
-                    logger.info('        1st browse command: {0}'.format(browseCmd1))
-                try:
-                    returnValue = call(browseCmd1, shell=True)
-                except:
-                    logger.error('Error: browse mergeCmd')
-                    logger.error('        Error: {0}'.format(traceback.format_exc()))
-                    tileErrorHasOccurred = True
-                    continue
-
-                                                                # scale the pixel values
-                brw2FileName = tile_id + '_brw2.tif'
-                brw2FullName = os.path.join(tileDir, brw2FileName)
-                browseCmd2 = gdaltranslateLoc + ' -scale 0 10000 -ot Byte ' + \
-                                       brw1FullName + ' ' + brw2FullName
-                if (debug):
-                    logger.info('        2nd browse command: {0}'.format(browseCmd2))
-                try:
-                    returnValue = call(browseCmd2, shell=True)
-                except:
-                    logger.error('Error: browse scaleCmd')
-                    logger.error('        Error: {0}'.format(traceback.format_exc()))
-                    tileErrorHasOccurred = True
-                    continue
-
-                                                                # apply compression
-                browseFileName = tile_id + '.tif'
-                browseFullName = os.path.join(browseOutputDir, browseFileName)
-                browseCmd3 = gdaltranslateLoc + ' -co COMPRESS=JPEG -co PHOTOMETRIC=YCBCR ' + \
-                                       brw2FullName + ' ' + browseFullName
-                if (debug):
-                    logger.info('        3rd browse command: {0}'.format(browseCmd3))
-                try:
-                    returnValue = call(browseCmd3, shell=True)
-                except:
-                    logger.error('Error: browse compressCmd')
-                    logger.error('        Error: {0}'.format(traceback.format_exc()))
-                    tileErrorHasOccurred = True
-                    continue
-
-                                                                # internal pyramids
-                browseCmd4 = gdaladdoLoc + ' ' + browseFullName + ' 2 4 8 16'
-                if (debug):
-                    logger.info('        4rd browse command: {0}'.format(browseCmd4))
-                try:
-                    returnValue = call(browseCmd4, shell=True)
-                except:
-                    logger.error('Error: browse internalPyramidsCmd')
-                    logger.error('        Error: {0}'.format(traceback.format_exc()))
-                    tileErrorHasOccurred = True
-                    continue
-
-                logger.info('    End building browse.')
+#                logger.info('Start browse creation')
+#                if (tileErrorHasOccurred):
+#                    continue
+#
+#                                                                # the browseList was filled up in the 'Band Type 1' section
+#                for browseBand in browseList:
+#                    if ('TAB5' in browseBand):
+#                        redBand = browseBand
+#                    elif ('TAB4' in browseBand):
+#                        grnBand = browseBand
+#                    else:
+#                        bluBand = browseBand
+#      
+#                                                                # merge r,g,b bands
+#                brw1FileName = tile_id + '_brw1.tif'
+#                brw1FullName = os.path.join(tileDir, brw1FileName)
+#                browseCmd1 = pythonLoc + ' ' + gdalmergeLoc + ' ' + "-o " + brw1FullName + \
+#                                       ' -separate ' + os.path.join(tileDir, redBand) + ' ' + \
+#                                      os.path.join(tileDir, grnBand) + ' ' + os.path.join(tileDir, bluBand)
+#                if (debug):
+#                    logger.info('        1st browse command: {0}'.format(browseCmd1))
+#                try:
+#                    returnValue = call(browseCmd1, shell=True)
+#                except:
+#                    logger.error('Error: browse mergeCmd')
+#                    logger.error('        Error: {0}'.format(traceback.format_exc()))
+#                    tileErrorHasOccurred = True
+#                    continue
+#
+#                                                                # scale the pixel values
+#                brw2FileName = tile_id + '_brw2.tif'
+#                brw2FullName = os.path.join(tileDir, brw2FileName)
+#                browseCmd2 = gdaltranslateLoc + ' -scale 0 10000 -ot Byte ' + \
+#                                       brw1FullName + ' ' + brw2FullName
+#                if (debug):
+#                    logger.info('        2nd browse command: {0}'.format(browseCmd2))
+#                try:
+#                    returnValue = call(browseCmd2, shell=True)
+#                except:
+#                    logger.error('Error: browse scaleCmd')
+#                    logger.error('        Error: {0}'.format(traceback.format_exc()))
+#                    tileErrorHasOccurred = True
+#                    continue
+#
+#                                                                # apply compression
+#                browseFileName = tile_id + '.tif'
+#                browseFullName = os.path.join(browseOutputDir, browseFileName)
+#                browseCmd3 = gdaltranslateLoc + ' -co COMPRESS=JPEG -co PHOTOMETRIC=YCBCR ' + \
+#                                       brw2FullName + ' ' + browseFullName
+#                if (debug):
+#                    logger.info('        3rd browse command: {0}'.format(browseCmd3))
+#                try:
+#                    returnValue = call(browseCmd3, shell=True)
+#                except:
+#                    logger.error('Error: browse compressCmd')
+#                    logger.error('        Error: {0}'.format(traceback.format_exc()))
+#                    tileErrorHasOccurred = True
+#                    continue
+#
+#                                                                # internal pyramids
+#                browseCmd4 = gdaladdoLoc + ' ' + browseFullName + ' 2 4 8 16'
+#                if (debug):
+#                    logger.info('        4rd browse command: {0}'.format(browseCmd4))
+#                try:
+#                    returnValue = call(browseCmd4, shell=True)
+#                except:
+#                    logger.error('Error: browse internalPyramidsCmd')
+#                    logger.error('        Error: {0}'.format(traceback.format_exc()))
+#                    tileErrorHasOccurred = True
+#                    continue
+#
+#                logger.info('    End building browse.')
 
 
 # ------------------------------------------------------------------------------------------------------------------ #
@@ -1837,16 +1837,16 @@ def processScenes(segment):
 #
                                                                 # An extra statistics file was created when building the
                                                                 # browse image. Remove it.
-                extraBrowseFullName = browseFullName + '.aux.xml'
-                logger.info('    Cleanup: Removing file: {0} ...'.format(extraBrowseFullName))
+#                extraBrowseFullName = browseFullName + '.aux.xml'
+#                logger.info('    Cleanup: Removing file: {0} ...'.format(extraBrowseFullName))
 
-                try:
-                    os.remove(extraBrowseFullName)
-                    logger.info('remove file: {0}'.format(extraBrowseFullName))
-                except:
-                    logger.error('Error: Removing file: {0} ...'.format(extraBrowseFullName))
-                    logger.error('        Error: {0}'.format(traceback.format_exc()))
-                    # continue on, even if we encountered an error down here
+#                try:
+#                    os.remove(extraBrowseFullName)
+#                    logger.info('remove file: {0}'.format(extraBrowseFullName))
+#                except:
+#                    logger.error('Error: Removing file: {0} ...'.format(extraBrowseFullName))
+#                    logger.error('        Error: {0}'.format(traceback.format_exc()))
+#                    # continue on, even if we encountered an error down here
 
                                                                 # Remove the temporary work directory
                 if (debug == False):
@@ -1932,7 +1932,7 @@ def processScenes(segment):
                 logger.info('Insert tile into ARD_COMPLETED_TILES table: {0}'.format(tile_id))
                 insert_cursor = connection.cursor()
                 completed_tile_list = []
-                processed_tiles_insert = "insert into ARD_COMPLETED_TILES (tile_id,CONTRIBUTING_SCENES,COMPLETE_TILE,PROCESSING_STATE) values (:1,:2,:3,:4)"
+                processed_tiles_insert = "insert /*+ ignore_row_on_dupkey_index(ARD_COMPLETED_TILES, TILE_ID_PK) */ into ARD_COMPLETED_TILES (tile_id,CONTRIBUTING_SCENES,COMPLETE_TILE,PROCESSING_STATE) values (:1,:2,:3,:4)"
                 sceneListStr = ",".join(contributingScenesforDB)
                 row = (tile_id,sceneListStr,complete_tile,processingState)
                 completed_tile_list.append(row)
