@@ -66,15 +66,15 @@ class ArdTileScheduler(mesos.interface.Scheduler):
             return
 
         # Connect to the database.
-        try:
-            con = cx_Oracle.connect(l2_db_con)
-            con.close()
-        except:
-            logger.error("Error:  Unable to connect to the database.")
-            shutdown.shutdown(0, 0)
-            for offer in offers:
-                driver.declineOffer(offer.id)
-            return
+#        try:
+#            con = cx_Oracle.connect(l2_db_con)
+#            con.close()
+#        except:
+#            logger.error("Error:  Unable to connect to the database.")
+#            shutdown.shutdown(0, 0)
+#            for offer in offers:
+#                driver.declineOffer(offer.id)
+#            return
 
         for offer in offers:
             if (not self.jobs or
@@ -466,6 +466,8 @@ def determineSegments(jobs):
    # iterate through scenes to process list building lists that contain
    # consecutive WRS_ROWS and storing that list in segments_list
    if len(scenes_to_process) > 0:
+      previous_acq_date = scenes_to_process[0][0].strftime('%Y-%m-%d')
+      previous_wrs_path = scenes_to_process[0][1]
       previous_wrs_row = scenes_to_process[0][2] -1
       previous_row = ()
       consec_wrs_row_list = []
@@ -481,14 +483,38 @@ def determineSegments(jobs):
           if len(tarFileName) > 0:
              # create new tuple with datetime object converted to string
              new_tuple = r[0].strftime('%Y-%m-%d'), r[1], r[2], tarFileName[0], r[4]
+             current_acq_date = r[0].strftime('%Y-%m-%d')
+             current_wrs_path = r[1]
              current_wrs_row = r[2]
-             if current_wrs_row-1 != previous_wrs_row:
-             # broken row number so save consec_wrs_row_list and nullify
-                segments_list.append(consec_wrs_row_list)
+             if current_acq_date != previous_acq_date:
+             # broken acquistion date so save consec_wrs_row_list and nullify
+                result = segmentCheck(str(consec_wrs_row_list),0)
+                if result == "OK":
+                   segments_list.append(consec_wrs_row_list)
+                else:
+                   logger.info("Bad segment: {0}, {1}".format(result,consec_wrs_row_list))
+                consec_wrs_row_list = []
+                   
+             elif current_wrs_path != previous_wrs_path:
+                result = segmentCheck(str(consec_wrs_row_list),0)
+                if result == "OK":
+                   segments_list.append(consec_wrs_row_list)
+                else:
+                   logger.info("Bad segment: {0}, {1}".format(result,consec_wrs_row_list))
+                consec_wrs_row_list = []
+
+             elif current_wrs_row-1 != previous_wrs_row:
+                result = segmentCheck(str(consec_wrs_row_list),0)
+                if result == "OK":
+                   segments_list.append(consec_wrs_row_list)
+                else:
+                   logger.info("Bad segment: {0}, {1}".format(result,consec_wrs_row_list))
                 consec_wrs_row_list = []
 
              # add record to consec_wrs_row_list list
              consec_wrs_row_list.append(new_tuple)
+             previous_acq_date = current_acq_date
+             previous_wrs_path = current_wrs_path
              previous_wrs_row = current_wrs_row
 
       # add last consec_wrs_row_list to segments_list
@@ -500,13 +526,13 @@ def determineSegments(jobs):
       segments_list.sort(reverse=True,key=len)
 
 
-      completed_scene_list = []
       processed_scenes_insert = "insert /*+ ignore_row_on_dupkey_index(ARD_PROCESSED_SCENES, SCENE_ID_PK) */ into ARD_PROCESSED_SCENES (scene_id,file_location) values (:1,:2)"
       segmentAboveThreshold = False
       # Start segment processing
       # 1. Loop through segments_list and pass segment (consec scene list) to 
       #    external program.
       for segment in segments_list:
+         completed_scene_list = []
          segment_length = len(segment)
          if segment_length >= minscenesperseg:
             segmentAboveThreshold = True
@@ -520,6 +546,12 @@ def determineSegments(jobs):
 
                # set 'BLANK' to 'INQUEUE' processing status
                set_record_to_inqueue(scene_record[4])
+
+            logger.info("Scenes inserted into ARD_PROCESSED_SCENES table: {0}".format(completed_scene_list))
+            cursor.bindarraysize = len(completed_scene_list)
+            cursor.prepare(processed_scenes_insert)
+            cursor.executemany(None, completed_scene_list)
+            connection.commit()
 
             # Build the Docker command.
             cmd = ['ARD_Clip_L457.py']
@@ -547,12 +579,12 @@ def determineSegments(jobs):
 
       # Insert scene list into ARD_PROCESSED_SCENES table
 
-      if len(completed_scene_list) > 0:
-         logger.info("Scenes inserted into ARD_PROCESSED_SCENES table: {0}".format(completed_scene_list))
-         cursor.bindarraysize = len(completed_scene_list)
-         cursor.prepare(processed_scenes_insert)
-         cursor.executemany(None, completed_scene_list)
-         connection.commit()
+#      if len(completed_scene_list) > 0:
+#         logger.info("Scenes inserted into ARD_PROCESSED_SCENES table: {0}".format(completed_scene_list))
+#         cursor.bindarraysize = len(completed_scene_list)
+#         cursor.prepare(processed_scenes_insert)
+#         cursor.executemany(None, completed_scene_list)
+#         connection.commit()
    else:
       logger.info("There are no scenes ready to process.")
 
@@ -598,6 +630,76 @@ def reset_records():
    connection.close()
 
    return SUCCESS
+
+def segmentCheck(fullSegment, knt):
+
+    result = ''
+
+                  # Gather information about the first scene
+                  
+    paren1 = fullSegment.find("(")
+    
+    date1start = fullSegment.find("'", paren1)
+    date1end = fullSegment.find("'", date1start+1)
+    firstDate = fullSegment[date1start+1:date1end]
+
+    path1start = fullSegment.find(",", date1end)
+    path1end = fullSegment.find(",", path1start+1)
+    firstPathStr = fullSegment[path1start+2:path1end]
+    firstPath = int(firstPathStr)
+
+    sat1start = fullSegment.find(".gz", paren1)
+    sat1end = fullSegment.find("'", sat1start+1)
+    firstSat = fullSegment[sat1start+7:sat1start+11]
+
+                   # Check each following scene against the first
+    paren1 = fullSegment.find("(",sat1end)
+                   
+    while (paren1 > -1):
+        paren2 = fullSegment.find(")", paren1)
+        sceneInfo = fullSegment[paren1+1:paren2]
+
+        dateStart = sceneInfo.find("('", sat1end)
+        dateEnd = sceneInfo.find("'", dateStart+3)
+        nextDate = sceneInfo[dateStart+2:dateEnd]
+
+        pathStart = sceneInfo.find(",", dateEnd)
+        pathEnd = sceneInfo.find(",", pathStart+1)
+        pathStr = sceneInfo[pathStart+2:pathEnd]
+        path = int(pathStr)
+
+        satStart = sceneInfo.find(".gz", pathEnd)
+        satEnd = sceneInfo.find("'", satStart+1)
+        Sat = sceneInfo[satStart+7:satStart+11]
+
+
+        #if (knt == 1):
+        #    print 'pos = ' + str(date1start)
+        #    print 'pos = ' + str(date1end)
+        #    print 'sceneInfo = ' + sceneInfo
+        #    print 'firstDate = ' + firstDate
+        #    print 'firstPathStr = ' + firstPathStr
+        #    print 'firstSat = ' + firstSat
+
+        #    print 'nextDate = ' + nextDate
+        #    print 'nextPath = ' + str(path)
+        #    print 'nextSat = ' + Sat
+
+        if not (firstDate == nextDate):
+            result = "Bad Dates: " + firstDate + "/" + nextDate
+    
+        if not (firstPath == path):
+            result = result + "  Bad Paths: " + str(firstPath) + "/" + str(path)
+
+        if not (firstSat == Sat):
+            result = result + "  Bad Satellites: " + firstSat + "/" + Sat
+        
+        paren1 = fullSegment.find("(", paren2)
+
+    if (result == ''):
+        return 'OK'
+        
+    return result
 
 # Main processing block
 if __name__ == "__main__":
