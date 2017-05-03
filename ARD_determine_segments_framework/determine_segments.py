@@ -23,6 +23,8 @@ import mesos.native
 import string
 import random
 from threading import Thread
+from operator import itemgetter
+from itertools import groupby
 
 
 SUCCESS = 0
@@ -287,7 +289,7 @@ logger = None
 # Message logging filter
 class L2PGS_LoggingFilter(logging.Filter):
     def filter(self, record):
-        record.subsystem = 'ARDClip'
+        record.subsystem = 'ARDFramework'
 
         return True
 
@@ -466,6 +468,7 @@ def determineSegments(jobs):
    # iterate through scenes to process list building lists that contain
    # consecutive WRS_ROWS and storing that list in segments_list
    if len(scenes_to_process) > 0:
+      previous_sat = scenes_to_process[0][5]
       previous_acq_date = scenes_to_process[0][0].strftime('%Y-%m-%d')
       previous_wrs_path = scenes_to_process[0][1]
       previous_wrs_row = scenes_to_process[0][2] -1
@@ -483,10 +486,20 @@ def determineSegments(jobs):
           if len(tarFileName) > 0:
              # create new tuple with datetime object converted to string
              new_tuple = r[0].strftime('%Y-%m-%d'), r[1], r[2], tarFileName[0], r[4]
+             current_sat = r[5]
              current_acq_date = r[0].strftime('%Y-%m-%d')
              current_wrs_path = r[1]
              current_wrs_row = r[2]
-             if current_acq_date != previous_acq_date:
+             if current_sat != previous_sat:
+             # break in satellite so save consec_wrs_row_list and nullify
+                result = segmentCheck(str(consec_wrs_row_list),0)
+                if result == "OK":
+                   segments_list.append(consec_wrs_row_list)
+                else:
+                   logger.info("Bad segment: {0}, {1}".format(result,consec_wrs_row_list))
+                consec_wrs_row_list = []
+                   
+             elif current_acq_date != previous_acq_date:
              # broken acquistion date so save consec_wrs_row_list and nullify
                 result = segmentCheck(str(consec_wrs_row_list),0)
                 if result == "OK":
@@ -513,6 +526,7 @@ def determineSegments(jobs):
 
              # add record to consec_wrs_row_list list
              consec_wrs_row_list.append(new_tuple)
+             previous_sat = current_sat
              previous_acq_date = current_acq_date
              previous_wrs_path = current_wrs_path
              previous_wrs_row = current_wrs_row
@@ -593,6 +607,125 @@ def determineSegments(jobs):
    connection.close()
    return SUCCESS
 
+def determineSegments2(jobs):
+
+   SQL = conf.segment_query
+ 
+
+
+   try:
+      connection = cx_Oracle.connect(l2_db_con)
+   except:
+      logger.error("Unable to connect to the database.")
+      return ERROR
+ 
+   cursor = connection.cursor()
+   cursor.execute(SQL)
+   scenes_to_process = cursor.fetchall()
+
+   logger.info("Number of scenes returned from query: {0}".format(len(scenes_to_process)))
+   #logger.info("Complete scene list: {0}".format(scenes_to_process))
+
+   # iterate through scenes pulling out only info that we need
+   # i.e. acq_date, path, row, file location and landsat product id
+   reformatted_list = []
+   if len(scenes_to_process) > 0:
+      previous_row = ()
+      for r in scenes_to_process:
+          if r == previous_row:
+             previous_row = r
+             continue
+          previous_row = r
+
+          # Get complete file name
+          tarFileName = glob.glob(r[3])
+          if len(tarFileName) > 0:
+             # create new tuple with datetime object converted to string
+             new_tuple = r[0].strftime('%Y-%m-%d'), r[1], r[2], tarFileName[0], r[4]
+
+             # add record to reformatted_list list
+             reformatted_list.append(new_tuple)
+
+
+      # group like satellite, acq_date and paths together in a list
+      temp_segments_list = []
+      for k, g in groupby(reformatted_list, lambda (x):x[4][:4]+x[4][17:25]+x[4][10:13]):
+        #print list(g)
+        temp_segments_list.append(list(g))
+
+      #print temp_segments_list
+      segments_list = []
+      # group sequential rows together in a list to create a segment
+      for segment in temp_segments_list:
+         for k, g in groupby(enumerate(segment), lambda (i,x):i-x[2]):
+            segments_list.append(map(itemgetter(1), g))
+
+      logger.info("Number of segments found: {0}".format(len(segments_list)))
+
+      # order segments_list by length of consec_wrs_row_list
+      segments_list.sort(reverse=True,key=len)
+
+
+      processed_scenes_insert = "insert /*+ ignore_row_on_dupkey_index(ARD_PROCESSED_SCENES, SCENE_ID_PK) */ into ARD_PROCESSED_SCENES (scene_id,file_location) values (:1,:2)"
+      segmentAboveThreshold = False
+      # Start segment processing
+      # 1. Loop through segments_list and pass segment (consec scene list) to 
+      #    external program.
+      for segment in segments_list:
+         completed_scene_list = []
+         segment_length = len(segment)
+         if segment_length >= minscenesperseg:
+            result = segmentCheck(str(segment),0)
+            if result == "OK":
+               segmentAboveThreshold = True
+               logger.info("Segment length: {0}".format(len(segment)))
+               logger.info("Segment: {0}".format(segment))
+               for scene_record in segment:
+                  # Build list of scenes here to be used in SQL Insert statement
+                  #print scene_record[4]
+                  row = (scene_record[4], scene_record[3])
+                  completed_scene_list.append(row)
+
+                  # set 'BLANK' to 'INQUEUE' processing status
+                  set_record_to_inqueue(scene_record[4])
+
+               logger.info("Scenes inserted into ARD_PROCESSED_SCENES table: {0}".format(completed_scene_list))
+               cursor.bindarraysize = len(completed_scene_list)
+               cursor.prepare(processed_scenes_insert)
+               cursor.executemany(None, completed_scene_list)
+               connection.commit()
+
+               # Build the Docker command.
+               cmd = ['ARD_Clip_L457.py']
+               if segment[0][4][:4] == 'LC08':
+                  cmd = ['ARD_Clip_L8.py']
+
+
+               cmd.extend(['"' + str(segment) + '"', conf.outdir + "/lta_incoming"])
+
+               # Compile the job information.
+               job = Job()
+               job_id = str(segment[0][1]).zfill(3) + '-' + str(segment[0][2]).zfill(3) + '-' + str(segment[len(segment)-1][2]).zfill(3) + '-' + segment[0][0]
+               job.cpus = conf.cpus
+               job.disk = conf.disk
+               job.mem = conf.memory
+               job.command = ' '.join(cmd)
+               job.job_id = job_id
+               jobs.append(job)
+            else:
+               logger.info("Bad segment: {0}, {1}".format(result,segment))
+
+      if not segmentAboveThreshold:
+         logger.info("No segments found that meet the {0} scenes per segment minimum".format(minscenesperseg))
+
+
+   else:
+      logger.info("There are no scenes ready to process.")
+
+
+   cursor.close()
+   connection.close()
+   return SUCCESS
 def set_record_to_inqueue(scene_id):
 
    updatesql = "update ARD_PROCESSED_SCENES set PROCESSING_STATE = 'INQUEUE' where scene_id = '" + scene_id + "'"
@@ -774,7 +907,7 @@ if __name__ == "__main__":
             break
 
         # If the job queue is empty, get work.
-        if (not mesosScheduler.jobs and determineSegments(mesosScheduler.jobs) == ERROR):
+        if (not mesosScheduler.jobs and determineSegments2(mesosScheduler.jobs) == ERROR):
             driver.stop(True)
             sys.exit(1)
 
@@ -788,7 +921,7 @@ if __name__ == "__main__":
                    mesosScheduler.tasksFinished == conf.max_jobs):
                 time.sleep(20)
             while not mesosScheduler.jobs:
-                if determineSegments(mesosScheduler.jobs) == ERROR:
+                if determineSegments2(mesosScheduler.jobs) == ERROR:
                     driver.stop(True)
                     sys.exit(1)
                 time.sleep(20)
