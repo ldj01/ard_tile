@@ -1224,6 +1224,19 @@ def processScenes(segment):
                     logger.error('Error: parsing histogram from lineage file: 0 contributing scenes')
                     logger.error('        Error: {0}'.format(traceback.format_exc()))
                     tileErrorHasOccurred = True
+
+                    # Insert tile into db and record it as "NOT NEEDED" i.e it's an empty tile
+                    processingState = "NOT NEEDED"
+
+                    completed_tile_list = []
+                    sceneListStr = "none"
+                    row = (tile_id,sceneListStr,complete_tile,processingState)
+                    completed_tile_list.append(row)
+
+                    insert_tile_record(connection, completed_tile_list)
+
+                    # Remove the temporary work directory
+                    shutil.rmtree(tileDir)
                     continue
 
                 logger.info('finish updating contributing scenes')
@@ -2050,19 +2063,12 @@ def processScenes(segment):
                 if not tileErrorHasOccurred:
                     processingState = "SUCCESS"
 
-                logger.info('Insert tile into ARD_COMPLETED_TILES table: {0}'.format(tile_id))
-                insert_cursor = connection.cursor()
                 completed_tile_list = []
-                processed_tiles_insert = "insert /*+ ignore_row_on_dupkey_index(ARD_COMPLETED_TILES, TILE_ID_PK) */ into ARD_COMPLETED_TILES (tile_id,CONTRIBUTING_SCENES,COMPLETE_TILE,PROCESSING_STATE) values (:1,:2,:3,:4)"
                 sceneListStr = ",".join(contributingScenesforDB)
                 row = (tile_id,sceneListStr,complete_tile,processingState)
                 completed_tile_list.append(row)
-                insert_cursor.bindarraysize = len(completed_tile_list)
-                insert_cursor.prepare(processed_tiles_insert)
-                insert_cursor.executemany(None, completed_tile_list)
-                connection.commit()
-                insert_cursor.close()
 
+                insert_tile_record(connection, completed_tile_list)
 
 
 
@@ -2089,6 +2095,19 @@ def processScenes(segment):
         unneededScene = scene_record[4]
         if (os.path.isdir(unneededScene)):
            shutil.rmtree(unneededScene)
+
+def insert_tile_record(connection, completed_tile_list):
+
+   logger.info('Insert tile into ARD_COMPLETED_TILES table: {0}'.format(completed_tile_list))
+   insert_cursor = connection.cursor()
+   processed_tiles_insert = "insert /*+ ignore_row_on_dupkey_index(ARD_COMPLETED_TILES, TILE_ID_PK) */ into ARD_COMPLETED_TILES (tile_id,CONTRIBUTING_SCENES,COMPLETE_TILE,PROCESSING_STATE) values (:1,:2,:3,:4)"
+   insert_cursor.bindarraysize = len(completed_tile_list)
+   insert_cursor.prepare(processed_tiles_insert)
+   insert_cursor.executemany(None, completed_tile_list)
+   insert_cursor.close()
+   connection.commit()
+
+
 
 
 
