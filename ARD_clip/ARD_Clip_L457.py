@@ -1206,7 +1206,7 @@ def processScenes(segment):
                 numScenesPerTile = parseSceneHistFile(sceneHistFilename)
 
                 if (numScenesPerTile == 0):
-                    logger.error('Error: parsing histogram from lineage file: 0 contributing scenes')
+                    logger.error('Warning: parsing histogram from lineage file: 0 contributing scenes')
                     logger.error('        Error: {0}'.format(traceback.format_exc()))
                     tileErrorHasOccurred = True
 
