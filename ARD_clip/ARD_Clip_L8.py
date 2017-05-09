@@ -1967,7 +1967,7 @@ def processScenes(segment):
                 if (debug):
                     logger.info('        Move browse to output directory')
                 try:
-                    os.rename(brw3FullName, browseFullName)
+                    shutil.move(brw3FullName, browseFullName)
                     logger.info('rename file: {0}'.format(brw3FullName))
                 except:
                     logger.error('Error: Moving file: {0} ...'.format(brw3FullName))
