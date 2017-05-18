@@ -320,12 +320,18 @@ def buildMetadata2(debug, logger, statsTuple, cutLimits, tileID, \
                 outGeneric.text = cpf_name
 
             if (newTag == 'lpgs_metadata_file'):
-                outGeneric = ET.SubElement(outSceneGlobal, 'geometric_rmse_model')
-                outGeneric.text = geometric_rmse_model
-                outGeneric = ET.SubElement(outSceneGlobal, 'geometric_rmse_model_x')
-                outGeneric.text = geometric_rmse_model_x
-                outGeneric = ET.SubElement(outSceneGlobal, 'geometric_rmse_model_y')
-                outGeneric.text = geometric_rmse_model_y
+
+                if geometric_rmse_model.find("not found") == -1:
+                   outGeneric = ET.SubElement(outSceneGlobal, 'geometric_rmse_model')
+                   outGeneric.text = geometric_rmse_model
+
+                if geometric_rmse_model_x.find("not found") == -1:
+                   outGeneric = ET.SubElement(outSceneGlobal, 'geometric_rmse_model_x')
+                   outGeneric.text = geometric_rmse_model_x
+
+                if geometric_rmse_model_y.find("not found") == -1:
+                   outGeneric = ET.SubElement(outSceneGlobal, 'geometric_rmse_model_y')
+                   outGeneric.text = geometric_rmse_model_y
 
         outSceneBands = ET.SubElement(outSceneMetadata, 'bands')
 
@@ -421,10 +427,13 @@ def buildMetadata2(debug, logger, statsTuple, cutLimits, tileID, \
 def getL1Value(debug, logger, L1String, key):
 
     startPos = L1String.find(key)
-    startPos = L1String.find('=', startPos)
-    endPos = L1String.find('\n', startPos)
-    rawValue = L1String[startPos+2:endPos]
-    return rawValue.replace('"', '')
+    if startPos != -1:
+       startPos = L1String.find('=', startPos)
+       endPos = L1String.find('\n', startPos)
+       rawValue = L1String[startPos+2:endPos]
+       return rawValue.replace('"', '')
+    else:
+       return key + " not found"
 
 
 # ----------------------------------------------------------------------------------------------
