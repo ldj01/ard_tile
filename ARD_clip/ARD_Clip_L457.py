@@ -270,14 +270,15 @@ def processScenes(segment):
                     logger.info("          Contributing scene: {0}".format(contrib_scene_id))
                     hsm_wildcard_name = "/" + pathRow[0].lstrip("0") + "/" + pathRow[1].lstrip("0") + "/" + targzName[:4] + pathRow[0] + pathRow[1] + targzName[17:25] + "*.tar.gz"
                     logger.info("          HSM wildcard name: {0}".format(hsm_wildcard_name))
+                    ######## Find hsm path for scene in segment ######
+                    contrib_scene_rec = []
+                    for scene_record2 in segment:
+                       if scene_record2[4].find(contrib_scene_id) > -1:
+                          scene_tuple = (scene_record2[3], scene_record2[4])
+                          contrib_scene_rec.append(scene_tuple)
+                    logger.info("Contributing scene from segment: {0}".format(contrib_scene_rec))
 
-                    SQL="select file_location, scene_id from ARD_PROCESSED_SCENES where scene_id like '" + contrib_scene_id + "%'"
-                    select_cursor = connection.cursor()
-                    select_cursor.execute(SQL)
-                    contrib_scene_rec = select_cursor.fetchall()
-                    logger.info("Contributing scene record: {0}".format(contrib_scene_rec))
-                    select_cursor.close()
-
+                    #################################################
 
                    # db scene record check
                     if len(contrib_scene_rec) > 0:

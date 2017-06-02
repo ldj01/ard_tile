@@ -692,7 +692,7 @@ def global_createProjInfo(debug, logger, cutLimits, region):
     blurb += '" x="' + '{:0.6f}'.format(cutLeft)  + '" location="UL"/>'
     blurb += '<corner_point y="' + '{:0.6f}'.format(cutBottom) 
     blurb += '" x="' + '{:0.6f}'.format(cutRight)  + '" location="LR"/>'
-    blurb += '<grid_origin>CORNER</grid_origin>' 
+    blurb += '<grid_origin>UL</grid_origin>' 
     blurb += '<albers_proj_params>' + prjStr + '</albers_proj_params>'
     blurb += '</projection_information>'
     
