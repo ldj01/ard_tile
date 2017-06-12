@@ -1,0 +1,69 @@
+{
+    "cmd": "determine_segments.py",
+    "container": {
+        "docker": {
+            "forcePullImage": true,
+            "image": "losrlcmp02.cr.usgs.gov:5000/tdd-ard-segment:0.0.2",
+            "network": "HOST",
+            "parameters": [-c /home/tilest/ARD_determine_segments.conf],
+            "privileged": false
+        },
+        "type": "DOCKER",
+        "volumes": [
+            {
+                "containerPath": "/etc/mesos",
+                "hostPath": "/etc/mesos",
+                "mode": "RO"
+            },
+            {
+                "containerPath": "/etc/localtime",
+                "hostPath": "/etc/localtime",
+                "mode": "RO"
+            },
+            {
+                "containerPath": "/home/tilest/ARD_determine_segments.conf",
+                "hostPath": "/usr/local/usgs/ard_tile/st/ARD_determine_segments.conf",
+                "mode": "RO"
+            },
+            {
+                "containerPath": "/hsm/lsat1",
+                "hostPath": "/hsm/lsat1",
+                "mode": "RO"
+            }
+        ]
+    },
+    "cpus": 0.2,
+    "disk": 0,
+    "fetch": [
+        {
+            "cache": false,
+            "executable": false,
+            "extract": true,
+            "uri": "/usr/local/usgs/bridge/docker.tar.gz"
+        }
+    ],
+    "healthChecks": [
+        {
+            "command": {
+                "value": "/bin/true"
+            },
+            "gracePeriodSeconds": 300,
+            "ignoreHttp1xx": false,
+            "intervalSeconds": 60,
+            "maxConsecutiveFailures": 10,
+            "protocol": "COMMAND",
+            "timeoutSeconds": 20
+        }
+    ],
+    "id": "/something",
+    "instances": 0,
+    "labels": {
+        "MARATHON_SINGLE_INSTANCE_APP": "true"
+    },
+    "mem": 256,
+    "taskKillGracePeriodSeconds": 600,
+    "upgradeStrategy": {
+        "maximumOverCapacity": 0,
+        "minimumHealthCapacity": 0
+    }
+}
