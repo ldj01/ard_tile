@@ -676,37 +676,37 @@ def get_command_line_arguments():
                             '\nExample: 3day(s)')
 
     # ---------------------------------
-    description = 'Allows changing a Landsat Product IDs state'
-    sub_p = subparsers.add_parser('productctl',
-                                  description=description,
-                                  help=description)
+#    description = 'Allows changing a Landsat Product IDs state'
+#    sub_p = subparsers.add_parser('productctl',
+#                                  description=description,
+#                                  help=description)
 
-    sub_p.add_argument('--product-id',
-                       action='store',
-                       dest='product_id',
-                       required=True,
-                       metavar='PRODUCT_ID',
-                       help='specifies the Landsat Product ID to modify')
+#    sub_p.add_argument('--product-id',
+#                       action='store',
+#                       dest='product_id',
+#                       required=True,
+#                       metavar='PRODUCT_ID',
+#                       help='specifies the Landsat Product ID to modify')
 
-    group = sub_p.add_mutually_exclusive_group(required=True)
+#    group = sub_p.add_mutually_exclusive_group(required=True)
 
-    group.add_argument('--ready',
-                       action='store_true',
-                       dest='ready',
-                       default=False,
-                       help='sets the specified PRODUCT_ID to ready state')
+#    group.add_argument('--ready',
+#                       action='store_true',
+#                       dest='ready',
+#                       default=False,
+#                       help='sets the specified PRODUCT_ID to ready state')
 
-    group.add_argument('--hold',
-                       action='store_true',
-                       dest='hold',
-                       default=False,
-                       help='sets the specified PRODUCT_ID to hold state')
+#    group.add_argument('--hold',
+#                       action='store_true',
+#                       dest='hold',
+#                       default=False,
+#                       help='sets the specified PRODUCT_ID to hold state')
 
-    group.add_argument('--error',
-                       action='store_true',
-                       dest='error',
-                       default=False,
-                       help='sets the specified PRODUCT_ID to error state')
+#    group.add_argument('--error',
+#                       action='store_true',
+#                       dest='error',
+#                       default=False,
+#                       help='sets the specified PRODUCT_ID to error state')
 
     # ---------------------------------
     description = 'Lists the Product IDs in a specific status'
@@ -729,17 +729,11 @@ def get_command_line_arguments():
                        default=False,
                        help='display Product IDs in the READY state')
 
-    group.add_argument('--hold',
+    group.add_argument('--reinit',
                        action='store_true',
-                       dest='hold',
+                       dest='reinit',
                        default=False,
-                       help='display Product IDs in the HOLD state')
-
-    group.add_argument('--error',
-                       action='store_true',
-                       dest='error',
-                       default=False,
-                       help='display Product IDs in the ERROR state')
+                       help='display Product IDs in the REINITLZD state')
 
     # ---------------------------------
     description = 'Displays the Mesos and Marathon leaders'
@@ -820,7 +814,7 @@ def status(args, cfg):
             print(STATUS_DATE_GREEN.format(str(datetime.now())))
             print('-'*60)
             if find_all or args.success or args.ready or args.reinit or args.processing or args.remaining:
-                print(HEADING_BLUE.format('SCENE STATUS'))
+                print(HEADING_BLUE.format('Product ID STATUS'))
 
             db_con = cx_Oracle.connect(cfg.ard_db_connect)
             try:
@@ -1155,24 +1149,20 @@ def list_ids(args, cfg):
         db_cur = db_con.cursor()
         try:
 
-            l47_select = ("select landsat_product_id_albers, processing_retries"
+            l47_select = ("select scene_id "
                           " from {0}"
                           " where processing_state = '{1}'")
 
             if args.processing:
-                select_stmt = l47_select.format(DB_ARD_SCENES, 'PROCESSING')
+                select_stmt = l47_select.format(DB_ARD_SCENES, 'INWORK')
                 db_cur.execute(select_stmt)
 
             elif args.ready:
-                select_stmt = l47_select.format(DB_ARD_SCENES, 'READY')
-                db_cur.execute(select_stmt)
-
-            elif args.hold:
-                select_stmt = l47_select.format(DB_ARD_SCENES, 'HOLD')
+                select_stmt = l47_select.format(DB_ARD_SCENES, 'INQUEUE')
                 db_cur.execute(select_stmt)
 
             else:
-                select_stmt = l47_select.format(DB_ARD_SCENES, 'ERROR')
+                select_stmt = l47_select.format(DB_ARD_SCENES, 'BLANK')
                 db_cur.execute(select_stmt)
 
             found = False
@@ -1293,7 +1283,7 @@ def main():
     cac['systemctl'] = systemctl
     cac['report'] = report
     cac['status'] = status
-    cac['productctl'] = productctl
+    #cac['productctl'] = productctl
     cac['list'] = list_ids
     cac['leaders'] = leaders
 
