@@ -1,9 +1,9 @@
 CREATE or REPLACE VIEW ARD_UNPROCESSED_SCENES_V AS
 select DATE_ACQUIRED, WRS_PATH,WRS_ROW,file_loc,LANDSAT_PRODUCT_ID,satellite,
        case
-            when WRS_PATH < 49 then 'CONUS'
-            when WRS_PATH||WRS_ROW in (6246,6247,6345,6346,6347,6445,6446,6545,6645) then 'HI'
-            when WRS_PATH||WRS_ROW in (7823,7923,7924,8021,8023,8024,8120,8123,8124,8223,8224,8318,8324,8418,8424,8516,8524,8624,8724,8823,8824,8923,8924,9023) then 'NOGRID'
+            when WRS_PATH < '049' then 'CONUS'
+            when WRS_PATH||WRS_ROW in ('062046','062047','063045','063046','063047','064045','064046','065045','066045') then 'HI'
+            when WRS_PATH||WRS_ROW in ('078023','079023','079024','080021','080023','080024','081020','081023','081024','082023','082024','083018','083024','084018','084024','085016','085024','086024','087024','088023','088024','089023','089024','090023') then 'NOGRID'
             else 'AK'
        end as REGION from (
 SELECT * FROM
@@ -11,8 +11,8 @@ SELECT * FROM
   select 
   distinct
   to_date(substr(LANDSAT_PRODUCT_ID,18,8),'YYYYMMDD') as DATE_ACQUIRED,
-  to_number(ltrim(substr(LANDSAT_PRODUCT_ID, 11,3),'0')) as WRS_PATH,
-  to_number(ltrim(substr(LANDSAT_PRODUCT_ID, 14,3),'0')) as WRS_ROW,
+  substr(LANDSAT_PRODUCT_ID, 11,3) as WRS_PATH,
+  substr(LANDSAT_PRODUCT_ID, 14,3) as WRS_ROW,
   L2_LOCATION || '/' || regexp_substr(LANDSAT_PRODUCT_ID, '[^_]+',1) || regexp_substr(LANDSAT_PRODUCT_ID, '[^_]+',1,3) || regexp_substr(LANDSAT_PRODUCT_ID, '[^_]+',1,4) || regexp_substr(LANDSAT_PRODUCT_ID, '[^_]+',1,6) || regexp_substr(LANDSAT_PRODUCT_ID, '[^_]+',1,7) || '-SC*.tar.gz' file_loc,
   LANDSAT_PRODUCT_ID,
   substr(LANDSAT_PRODUCT_ID,1,4) satellite
@@ -24,8 +24,8 @@ SELECT * FROM
  select
  distinct
   to_date(substr(LANDSAT_PRODUCT_ID,18,8),'YYYYMMDD') as DATE_ACQUIRED,
-  to_number(ltrim(substr(LANDSAT_PRODUCT_ID, 11,3),'0')) as WRS_PATH,
-  to_number(ltrim(substr(LANDSAT_PRODUCT_ID, 14,3),'0')) as WRS_ROW,
+  substr(LANDSAT_PRODUCT_ID, 11,3) as WRS_PATH,
+  substr(LANDSAT_PRODUCT_ID, 14,3) as WRS_ROW,
  L2_LOCATION || '/' || regexp_substr(LANDSAT_PRODUCT_ID, '[^_]+',1) || regexp_substr(LANDSAT_PRODUCT_ID, '[^_]+',1,3) || regexp_substr(LANDSAT_PRODUCT_ID, '[^_]+',1,4) || regexp_substr(LANDSAT_PRODUCT_ID, '[^_]+',1,6) || regexp_substr(LANDSAT_PRODUCT_ID, '[^_]+',1,7) || '-SC*.tar.gz' file_loc,
  LANDSAT_PRODUCT_ID,
  substr(LANDSAT_PRODUCT_ID,1,4) satellite
@@ -43,8 +43,8 @@ SELECT * FROM
  select
  distinct
   to_date(substr(LANDSAT_PRODUCT_ID,18,8),'YYYYMMDD') as DATE_ACQUIRED,
-  to_number(ltrim(substr(LANDSAT_PRODUCT_ID, 11,3),'0')) as WRS_PATH,
-  to_number(ltrim(substr(LANDSAT_PRODUCT_ID, 14,3),'0')) as WRS_ROW,
+  substr(LANDSAT_PRODUCT_ID, 11,3) as WRS_PATH,
+  substr(LANDSAT_PRODUCT_ID, 14,3) as WRS_ROW,
  L2_LOCATION || '/' || regexp_substr(LANDSAT_PRODUCT_ID, '[^_]+',1) || regexp_substr(LANDSAT_PRODUCT_ID, '[^_]+',1,3) || regexp_substr(LANDSAT_PRODUCT_ID, '[^_]+',1,4) || regexp_substr(LANDSAT_PRODUCT_ID, '[^_]+',1,6) || regexp_substr(LANDSAT_PRODUCT_ID, '[^_]+',1,7) || '-SC*.tar.gz' file_loc,
  LANDSAT_PRODUCT_ID,
  substr(LANDSAT_PRODUCT_ID,1,4) satellite
