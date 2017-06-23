@@ -76,7 +76,7 @@ import logging
 
 
 from ARD_HelperFunctions import logIt, appendToLog, reportToStdout, getARDName
-from ARD_HelperFunctions import getTileFootprintCoords, makeMetadataString, parseHistFile
+from ARD_HelperFunctions import getTileFootprintCoords, makeMetadataString, raster_value_count
 from ARD_HelperFunctions import getProductionDateTime, parseSceneHistFile, setup_logging
 from ARD_tilesForSceneLU import tilesForSceneLU
 from ARD_scenesForTilePathLU import scenesForTilePathLU
@@ -195,7 +195,6 @@ def processScenes(segment):
         update_cursor.close()
         logger.info("Scene {0} is INWORK.".format(scene_record[4]))
 
-        additionalSceneCleanUpList = []
                              # Current scene to process
         #reportToStdout scene_record
         targzName = scene_record[4] + '.tar.gz'
@@ -264,14 +263,11 @@ def processScenes(segment):
          
                 contributingScenes = []
                 contributingScenesforDB = []
-                hsmFileNames = []
-                hsmSceneID = []
                 for pathRow in scenesForTilePath:
                     # LE07_L2TP_026028_19990709_20161112_01_A1
-                    contrib_scene_id = targzName[:10] + pathRow[0] + pathRow[1] + targzName[16:25]
+                    #contrib_scene_id = targzName[:10] + pathRow[0] + pathRow[1] + targzName[16:25]
+                    contrib_scene_id = pathRow[0] + pathRow[1] + targzName[16:25]
                     logger.info("          Contributing scene: {0}".format(contrib_scene_id))
-                    hsm_wildcard_name = "/" + pathRow[0].lstrip("0") + "/" + pathRow[1].lstrip("0") + "/" + targzName[:4] + pathRow[0] + pathRow[1] + targzName[17:25] + "*.tar.gz"
-                    logger.info("          HSM wildcard name: {0}".format(hsm_wildcard_name))
                     ######## Find hsm path for scene in segment ######
                     contrib_scene_rec = []
                     for scene_record2 in segment:
@@ -282,34 +278,35 @@ def processScenes(segment):
 
                     #################################################
 
-                   # db scene record check
+                    ######## Find hsm path for scene in db ######
+
+                    if len(contrib_scene_rec) < 1:
+                       SQL="select FILE_LOC, LANDSAT_PRODUCT_ID from ARD_L2_ALBERS_INVENTORY_V where LANDSAT_PRODUCT_ID like '%" + contrib_scene_id + "%' order by LANDSAT_PRODUCT_ID desc"
+                       select_cursor = connection.cursor()
+                       select_cursor.execute(SQL)
+                       temp_rec = select_cursor.fetchall()
+                       select_cursor.close()
+                       logger.info("Contributing scene from db: {0}".format(temp_rec))
+                       if len(temp_rec) > 0:
+                          fullName = glob.glob(temp_rec[0][0])
+                          if len(fullName) > 0:
+                             scene_tuple = (fullName[0], temp_rec[0][1])
+                             contrib_scene_rec.append(scene_tuple)
+                             logger.info("Contributing scene from db: {0}".format(contrib_scene_rec))
+                    #################################################
+
+
+                    # db scene record check
                     if len(contrib_scene_rec) > 0:
                         contributingScenes.append(contrib_scene_rec[0][0])
                         contributingScenesforDB.append(contrib_scene_rec[0][1])
-                    else:
-                        hsmFileNames.append(hsm_wildcard_name)
-                        hsmSceneID.append(contrib_scene_id + '_' + scene_id_parts[4] + '_' + scene_id_parts[5] + '_' + scene_id_parts[6])
 
 
                 complete_tile = 'Y'
-                parsed_list = contributingScenes[0].rsplit("/",3)
                 if len(contributingScenes) != len(scenesForTilePath):
+                    complete_tile = 'N'
 
-                    # see if contributing file exists on hsm
-                    fileFoundCtr = 0
-                    loopCtr = 0
-                    for hsm_wildcard_name in hsmFileNames:
-                       hsm_full_wildcard = parsed_list[0] + hsm_wildcard_name
-                       fullName = glob.glob(hsm_full_wildcard)
-                       if len(fullName) > 0:
-                          fileFoundCtr = fileFoundCtr + 1
-                          contributingScenes.append(fullName[0])
-                          contributingScenesforDB.append(hsmSceneID[loopCtr])
-                          additionalSceneCleanUpList.append(hsmSceneID[loopCtr])
-                       loopCtr = loopCtr + 1
 
-                    if len(hsmFileNames) != fileFoundCtr:    
-                       complete_tile = 'N'
 
                 logger.info("Contributing scenes: {0}".format(contributingScenes))
 
@@ -447,8 +444,8 @@ def processScenes(segment):
                         stackB_Prefix = sceneInfoList[0][1]
                         stackA_Dir = sceneInfoList[1][0]
                         stackB_Dir = sceneInfoList[0][0]
-                        stackA_Value = 2
-                        stackB_Value = 1
+                        stackA_Value = 1
+                        stackB_Value = 2
                         stackA_MetadataName = sceneInfoList[1][4]
                         stackB_MetadataName = sceneInfoList[0][4]
       
@@ -1598,149 +1595,24 @@ def processScenes(segment):
                 if (tileErrorHasOccurred):
                     continue
           
-                                                        # The pixel_qa band is 16bit unsigned int.
-                                                        #
-                                                        # For L8, there is valid information in bits 8,9, and 10.
-                                                        # If bits 8 and 9 are set, this means Cirrus Confidence 
-                                                        # is high and this pixel should be included in the cloud
-                                                        # percentage count.
-                                                        # 
 
-                                                        # Create an 8bit mask with only those pixels 
-                                                        # that have High Cirrus Confidence.  Both bits
-                                                        # 8 and 9 must be set.  This means the pixel
-                                                        # values are between 768 and 1024
-      
-                calcExpression = ' --calc="logical_and((A>=768), (A<1024))"'
-                pqaCirrusMaskCmd = pythonLoc + ' ' + gdalcalcLoc + ' -A ' + pqaTileStart + \
-                                               ' --outfile ' + pqaCirrusMask + calcExpression + ' --type="Byte" --NoDataValue=255'
-                if (debug):
-                    logger.info('        > pqaCirrusMaskCmd: {0}'.format(pqaCirrusMaskCmd))
-                try:
-                    returnValue = call(pqaCirrusMaskCmd, shell=True)
-                except:
-                    logger.error('Error: creating pqaCirrusMask')
-                    logger.error('        Error: {0}'.format(traceback.format_exc()))
+                statsTupleBits = raster_value_count(pqaTileStart, True)
+                if (len(statsTupleBits) == 1):
+                    logger.error('        Error {0} pixel counts.'.format(pqaTileStart))
                     tileErrorHasOccurred = True
                     continue
-      
-                                                        # Create a new file with values only up to 255.
-                                                        # Pixels greater than 255 are turned to 0
 
-                pqaLowerBitsCmd = gdaltranslateLoc + ' -ot "Byte" -a_nodata 0 -unscale ' + pqaTileStart + ' ' + pqaLowerBits
-                if (debug):
-                    logger.info('        > pqaLowerBitsCmd: {0}'.format(pqaLowerBitsCmd))
-                try:
-                    returnValue = call(pqaLowerBitsCmd, shell=True)
-                except:
-                    logger.error('Error: converting pixelQA band to 8bit')
-                    logger.error('        Error: {0}'.format(traceback.format_exc()))
-                    tileErrorHasOccurred = True
-                    continue
-      
-                                                        # Create an 8bit mask with only those pixels 
-                                                        # that have High Cloud Confidence.  Bit 5
-                                                        # must be set in the Lower Bit file that
-                                                        # we just created. 
-
-
-                calcExpression = ' --calc="bitwise_and(A, 32)"'
-                pqaCloudMaskCmd = pythonLoc + ' ' + gdalcalcLoc + ' -A ' + pqaLowerBits + \
-                                               ' --outfile ' + pqaCloudMask + calcExpression + ' --type="Byte" --NoDataValue=255'
-                if (debug):
-                    logger.info('        > pqaCloudMaskCmd: {0}'.format(pqaCloudMaskCmd))
-                try:
-                    returnValue = call(pqaCloudMaskCmd, shell=True)
-                except:
-                    logger.error('Error: creating pqaCloudMask')
-                    logger.error('        Error: {0}'.format(traceback.format_exc()))
-                    tileErrorHasOccurred = True
-                    continue
-      
-                                                        # We now have two 8 bit masks - one denoting 
-                                                        # Cirrus Clouds and the second denoting Clouds.
-                                                        # We will logical_or these two together in case
-                                                        # a pixel has both cases set.  The result will give
-                                                        # us a new mask showing pixels that will be 
-                                                        # counted when calculating the cloud cover 
-                                                        # percentage for the tile.
-
-                calcExpression = ' --calc="logical_or((A==1),(B==32))"'
-                pqaCloudCirrusMaskCmd = pythonLoc + ' ' + gdalcalcLoc + ' -A ' + pqaCirrusMask + \
-                                                       ' -B ' + pqaCloudMask + ' --outfile ' + pqaCloudCirrusMask + \
-                                                       calcExpression + ' --type="Byte" --NoDataValue=255'
-                if (debug):
-                    logger.info('        > pqaCloudCirrusMaskCmd: {0}'.format(pqaCloudCirrusMaskCmd))
-                try:
-                    returnValue = call(pqaCloudCirrusMaskCmd, shell=True)
-                except:
-                    logger.error('Error: creating pqaCloudCirrusMask')
-                    logger.error('        Error: {0}'.format(traceback.format_exc()))
-                    tileErrorHasOccurred = True
-                    continue
-      
-                                                        # Generate a histogram for the values in the 
-                                                        # CloudCirrusMask.  Since this is a mask, we
-                                                        # will only get a 0 or a 1 back.  The 1's give us 
-                                                        # the number of pixels that are either High
-                                                        # Confidence Cloud, High Confidence Cirrus,
-                                                        # or both.
-
-                histCloudCmd = gdalinfoLoc + ' -hist ' + pqaCloudCirrusMask + ' >> ' + histCloudCirrus
-                if (debug):
-                    logger.info('        > histCloudCmd: {0}'.format(histCloudCmd))
-                try:
-                    returnValue = call(histCloudCmd, shell=True)
-                except:
-                    logger.error('Error: generating histogram for cloud/cirrus pixels')
-                    logger.error('        Error: {0}'.format(traceback.format_exc()))
-                    tileErrorHasOccurred = True
-                    continue
-      
-                                                       # Read the CloudCirrusMask histogram to find
-                                                       # the number of pixels      
-
-                statsTupleCloudCirrus = parseHistFile(histCloudCirrus)
-                if (len(statsTupleCloudCirrus) == 1):
-                    logger.error('        Error reading CloudCirrus Histogram file.')
-                    tileErrorHasOccurred = True
-                    continue
-      
-                                                        # Generate a histogram for the values in the 
-                                                        # LowerBits file.  These values give us the
-                                                        # number of pixels of Clear Terrain, Water, 
-                                                        # Snow/Ice, and Cloud Shadow.  We will ignore
-                                                        # the cloud bits since we already counted them
-                                                        # in the previous step.
-
-                histLowerBitsCmd = gdalinfoLoc + ' -hist ' + pqaLowerBits + ' >> ' + histLowerBits
-                if (debug):
-                    logger.info('        > histLowerBitsCmd: {0}'.format(histLowerBitsCmd))
-                try:
-                    returnValue = call(histLowerBitsCmd, shell=True)
-                except:
-                    logger.error('Error: generating histogram for pixels in the lower bits')
-                    logger.error('        Error: {0}'.format(traceback.format_exc()))
-                    tileErrorHasOccurred = True
-                    continue
-      
-                                                        # Read the LowerBits histogram to find
-                                                        # the number of pixels      
-
-                statsTupleLowerBits = parseHistFile(histLowerBits)
-                if (len(statsTupleLowerBits) == 1):
-                    logger.error('        Error reading LowerBits Histogram file.')
-                    tileErrorHasOccurred = True
-                    continue
       
                                                         # Gather pixel counts
                                                         # 
-                countFill = statsTupleLowerBits[0]
-                countClear = statsTupleLowerBits[1]
-                countWater = statsTupleLowerBits[2]
-                countSnow = statsTupleLowerBits[3]
-                countShadow = statsTupleLowerBits[4]
-                countCloud = statsTupleCloudCirrus[0]
+                countFill = statsTupleBits[0]
+                countClear = statsTupleBits[1]
+                countWater = statsTupleBits[2]
+                countShadow = statsTupleBits[3]
+                countSnow = statsTupleBits[4]
+                countCloud = statsTupleBits[5]
+                countCirrus = statsTupleBits[6]
+                countTerrain = statsTupleBits[7]
       
                 if (debug):
                     logger.info('        # pixels Fill: {0}'.format(str(countFill)))
@@ -1749,9 +1621,12 @@ def processScenes(segment):
                     logger.info('        # pixels Snow: {0}'.format(str(countSnow)))
                     logger.info('        # pixels CloudShadow: {0}'.format(str(countShadow)))
                     logger.info('        # pixels CloudCover: {0}'.format(str(countCloud)))
+                    logger.info('        # pixels Cirrus: {0}'.format(str(countCirrus)))
+                    logger.info('        # pixels Terrain: {0}'.format(str(countTerrain)))
 
                                                         # Build a new tuple to hold the pixel counts
-                statsTupleCombo = (countFill, countClear, countWater, countSnow, countShadow, countCloud)
+                statsTupleCombo = (countFill, countClear, countWater, countSnow, countShadow,
+                                   countCloud, countCirrus, countTerrain)
     
                                                         #
                                                         # Create the tile metadata file
@@ -2083,10 +1958,6 @@ def processScenes(segment):
         update_cursor.close()
         logger.info("Scene {0} is COMPLETE.".format(scene_record[4]))
 
-        # cleanup untarred scene directories not in segment
-        for additionalScene in additionalSceneCleanUpList:
-           if (os.path.isdir(additionalScene)):
-              shutil.rmtree(additionalScene)
 
         # increment segment scene counter
         sceneCtr = sceneCtr + 1

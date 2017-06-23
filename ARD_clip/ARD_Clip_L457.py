@@ -74,7 +74,7 @@ import logging
 
 
 from ARD_HelperFunctions import logIt, appendToLog, reportToStdout, getARDName
-from ARD_HelperFunctions import getTileFootprintCoords, makeMetadataString, parseHistFile
+from ARD_HelperFunctions import getTileFootprintCoords, makeMetadataString, raster_value_count
 from ARD_HelperFunctions import getProductionDateTime, parseSceneHistFile, setup_logging
 from ARD_tilesForSceneLU import tilesForSceneLU
 from ARD_scenesForTilePathLU import scenesForTilePathLU
@@ -193,7 +193,6 @@ def processScenes(segment):
         update_cursor.close()
         logger.info("Scene {0} is INWORK.".format(scene_record[4]))
 
-        additionalSceneCleanUpList = []
                              # Current scene to process
         #reportToStdout scene_record
         targzName = scene_record[4] + '.tar.gz'
@@ -262,14 +261,11 @@ def processScenes(segment):
          
                 contributingScenes = []
                 contributingScenesforDB = []
-                hsmFileNames = []
-                hsmSceneID = []
                 for pathRow in scenesForTilePath:
                     # LE07_L2TP_026028_19990709_20161112_01_A1
-                    contrib_scene_id = targzName[:10] + pathRow[0] + pathRow[1] + targzName[16:25]
+                    #contrib_scene_id = targzName[:10] + pathRow[0] + pathRow[1] + targzName[16:25]
+                    contrib_scene_id = pathRow[0] + pathRow[1] + targzName[16:25]
                     logger.info("          Contributing scene: {0}".format(contrib_scene_id))
-                    hsm_wildcard_name = "/" + pathRow[0].lstrip("0") + "/" + pathRow[1].lstrip("0") + "/" + targzName[:4] + pathRow[0] + pathRow[1] + targzName[17:25] + "*.tar.gz"
-                    logger.info("          HSM wildcard name: {0}".format(hsm_wildcard_name))
                     ######## Find hsm path for scene in segment ######
                     contrib_scene_rec = []
                     for scene_record2 in segment:
@@ -280,34 +276,35 @@ def processScenes(segment):
 
                     #################################################
 
-                   # db scene record check
+                    ######## Find hsm path for scene in db ######
+
+                    if len(contrib_scene_rec) < 1:
+                       SQL="select FILE_LOC, LANDSAT_PRODUCT_ID from ARD_L2_ALBERS_INVENTORY_V where LANDSAT_PRODUCT_ID like '%" + contrib_scene_id + "%' order by LANDSAT_PRODUCT_ID desc"
+                       select_cursor = connection.cursor()
+                       select_cursor.execute(SQL)
+                       temp_rec = select_cursor.fetchall()
+                       select_cursor.close()
+                       logger.info("Contributing scene from db: {0}".format(temp_rec))
+                       if len(temp_rec) > 0:
+                          fullName = glob.glob(temp_rec[0][0])
+                          if len(fullName) > 0:
+                             scene_tuple = (fullName[0], temp_rec[0][1])
+                             contrib_scene_rec.append(scene_tuple)
+                             logger.info("Contributing scene from db: {0}".format(contrib_scene_rec))
+                    #################################################
+
+
+                    # db scene record check
                     if len(contrib_scene_rec) > 0:
                         contributingScenes.append(contrib_scene_rec[0][0])
                         contributingScenesforDB.append(contrib_scene_rec[0][1])
-                    else:
-                        hsmFileNames.append(hsm_wildcard_name)
-                        hsmSceneID.append(contrib_scene_id + '_' + scene_id_parts[4] + '_' + scene_id_parts[5] + '_' + scene_id_parts[6])
 
 
                 complete_tile = 'Y'
-                parsed_list = contributingScenes[0].rsplit("/",3)
                 if len(contributingScenes) != len(scenesForTilePath):
+                    complete_tile = 'N'
 
-                    # see if contributing file exists on hsm
-                    fileFoundCtr = 0
-                    loopCtr = 0
-                    for hsm_wildcard_name in hsmFileNames:
-                       hsm_full_wildcard = parsed_list[0] + hsm_wildcard_name
-                       fullName = glob.glob(hsm_full_wildcard)
-                       if len(fullName) > 0:
-                          fileFoundCtr = fileFoundCtr + 1
-                          contributingScenes.append(fullName[0])
-                          contributingScenesforDB.append(hsmSceneID[loopCtr])
-                          additionalSceneCleanUpList.append(hsmSceneID[loopCtr])
-                       loopCtr = loopCtr + 1
 
-                    if len(hsmFileNames) != fileFoundCtr:    
-                       complete_tile = 'N'
 
                 logger.info("Contributing scenes: {0}".format(contributingScenes))
 
@@ -445,8 +442,8 @@ def processScenes(segment):
                         stackB_Prefix = sceneInfoList[0][1]
                         stackA_Dir = sceneInfoList[1][0]
                         stackB_Dir = sceneInfoList[0][0]
-                        stackA_Value = 2
-                        stackB_Value = 1
+                        stackA_Value = 1
+                        stackB_Value = 2
                         stackA_MetadataName = sceneInfoList[1][4]
                         stackB_MetadataName = sceneInfoList[0][4]
       
@@ -1583,47 +1580,13 @@ def processScenes(segment):
                 if (tileErrorHasOccurred):
                     continue
           
-                                                        # generate a histogram for pixel quality
-
-                                                        # The pixel_qa band is 16bit unsigned int.
-                                                        #
-                                                        # default histogram option for gdalinfo is 256 buckets.
-                                                        # Since all values in the pixel_qa band are < 256, we will
-                                                        # create an 8bit version.
-                                                        #
-                                                        # The NoData value = 1.  When we make the histogram, it does
-                                                        # not count the NoDatas.  So we will reassign NoData to zero
-                                                        # just for when we create the histogram. 
-                                                        #
       
-                qa256Cmd = gdaltranslateLoc + ' -ot "Byte" -a_nodata 0 -unscale ' + pixelQATile + ' ' + pixelQATile256
-                if (debug):
-                    logger.info('        > qa256Cmd: {0}'.format(qa256Cmd))
-                try:
-                    returnValue = call(qa256Cmd, shell=True)
-                except:
-                    logger.error('Error: converting pixelQA band to 8bit')
-                    logger.error('        Error: {0}'.format(traceback.format_exc()))
-                    tileErrorHasOccurred = True
-                    continue
-
-                histCmd = gdalinfoLoc + ' -hist ' + pixelQATile256 + ' >> ' + histFilename
-                if (debug):
-                    logger.info('        > histCmd: {0}'.format(histCmd))
-                try:
-                    returnValue = call(histCmd, shell=True)
-                except:
-                    logger.error('Error: generating histogram for metadata')
-                    logger.error('        Error: {0}'.format(traceback.format_exc()))
-                    tileErrorHasOccurred = True
-                    continue
-          
-                statsTuple = parseHistFile(histFilename)
+                statsTuple = raster_value_count(pixelQATile, False)
                 if (len(statsTuple) == 1):
-                    logger.error('        Histogram Error: {0}'.format(statsTuple[0]))
+                    logger.error('        Error {0} pixel counts.'.format(pixelQATile))
                     tileErrorHasOccurred = True
                     continue
-      
+
                 if (debug):
                     logger.info('        # pixels Fill: {0}'.format(str(statsTuple[0])))
                     logger.info('        # pixels Clear: {0}'.format(str(statsTuple[1])))
@@ -1962,10 +1925,6 @@ def processScenes(segment):
         update_cursor.close()
         logger.info("Scene {0} is COMPLETE.".format(scene_record[4]))
 
-        # cleanup untarred scene directories not in segment
-        for additionalScene in additionalSceneCleanUpList:
-           if (os.path.isdir(additionalScene)):
-              shutil.rmtree(additionalScene)
 
         # increment segment scene counter
         sceneCtr = sceneCtr + 1

@@ -10,6 +10,8 @@ import datetime
 import os
 import logging
 import sys
+from osgeo import gdal
+import numpy as np
 
 
 # ----------------------------------------------------------------------------------------------
@@ -278,7 +280,48 @@ def setup_logging():
 
 # ==========================================================================
 
+# ----------------------------------------------------------------------------------------------
+#
+# return counts for each cover type
+def sum_counts(unique_values, count_list, target_bit):
+    # determine if each unique value contains target bit
+    bit_bool = unique_values & 1 << target_bit > 0
+
+    # sum counts from all values containing target bit
+    final_count = np.sum(np.array(count_list)[bit_bool])
+
+    return final_count
+
+# ----------------------------------------------------------------------------------------------
+#
+def raster_value_count(raster_in, landsat_8=False):
 
 
+    # open raster, read first band as array
+    ds = gdal.Open(raster_in)
+    band_arr = np.array(ds.GetRasterBand(1).ReadAsArray())
+
+    # get unique values from array
+    uni, counts = np.unique(band_arr, return_counts=True)
+
+    # count bits
+    countFill = counts[0]
+    countClear = sum_counts(uni, counts, 1)
+    countWater = sum_counts(uni, counts, 2)
+    countShadow = sum_counts(uni, counts, 3)
+    countSnow = sum_counts(uni, counts, 4)
+    countCloud = sum_counts(uni, counts, 5)
+
+    # get high-conf cirrus and terrain occlusion for L8
+    if landsat_8:
+        countCirrus = sum_counts(uni, counts, 9)
+        countTerrain = sum_counts(uni, counts, 10)
+
+        return (countFill, countClear, countWater, countShadow, countSnow,
+                countCloud, countCirrus, countTerrain)
+
+    else:  # else return for L4-7
+        return (countFill, countClear, countWater, countSnow, countShadow, 
+                countCloud)
 
 

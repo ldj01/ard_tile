@@ -360,9 +360,9 @@ def buildMetadata2(debug, logger, statsTuple, cutLimits, tileID, \
     namespace2Prefix = "xmlns:xsi"
     namespace3Prefix = "xsi:schemaLocation"
     
-    namespace1URI = "http://ard.cr.usgs.gov/v1"
-    namespace2URI = "http://www.w3.org/2001/XMLSchema-instance"
-    namespace3URI = "http://ard.cr.usgs.gov/v1 http://espa.cr.usgs.gov/schema/ard_metadata_v1_0.xsd"
+    namespace1URI = "https://landsat.usgs.gov/ard/v1"
+    namespace2URI = "https://www.w3.org/2001/XMLSchema-instance"
+    namespace3URI = "https://landsat.usgs.gov/ard/v1 https://landsat.usgs.gov/ard/ard_metadata_v1_0.xsd"
     
     outRoot.attrib[namespace3Prefix] = namespace3URI
     outRoot.attrib[namespace2Prefix] = namespace2URI
