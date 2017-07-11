@@ -304,7 +304,7 @@ def register_marathon_tasks(args, cfg):
     """
 
     conf_mount = {'containerPath': os.path.join(cfg.base_config_path,
-                                                'pgs.conf'),
+                                                'ARD_determine_segments.conf'),
                   'hostPath': cfg.config_file,
                   'mode': 'RO' }
 
@@ -1043,12 +1043,9 @@ def report(args, cfg):
     report = build_report(args, cfg)
     print "Finished creating report"
 
-
     msg = MIMEText(report)
 
     fromAddr = 'ardtile@usgs.gov'
-
-    #toAddr = 'todd.doerr.ctr@usgs.gov'
 
     toAddr = args.emails.split(",")
     msg['Subject'] = 'Daily ARD Report'
@@ -1208,7 +1205,7 @@ MarathonInfo = namedtuple('MarathonInfo', ('user',
                                            'group'))
 
 # Configuration information structure
-ConfigInfo = namedtuple('ConfigInfo', ('pgs_mode',
+ConfigInfo = namedtuple('ConfigInfo', ('ard_mode',
                                        'base_config_path',
                                        'config_file',
                                        'ard_db_connect',
@@ -1227,11 +1224,11 @@ def read_configuration():
     """
 
     # A dev directory should never exist in it, st, and ops configurations
-    pgs_mode = os.environ.get('ARDTILE_MODE', 'st')
+    ard_mode = os.environ.get('ARDTILE_MODE', 'dev')
 
     base_config_path = '/usr/local/usgs/ard_tile'
 
-    config_file = os.path.join(base_config_path, pgs_mode, 'ARD_determine_segments.conf')
+    config_file = os.path.join(base_config_path, ard_mode, 'ARD_determine_segments.conf')
 
     if not os.path.isfile(config_file):
         raise ARDTILEMissingConfigError('Missing {}'.format(config_file))
@@ -1243,7 +1240,7 @@ def read_configuration():
     marathon_section = 'marathon'
     pgs_task_section = 'pgs_task'
 
-    marathon_group = '-'.join([cfg.get(marathon_section, 'group'), pgs_mode])
+    marathon_group = '-'.join([cfg.get(marathon_section, 'group'), ard_mode])
     marathon_info = MarathonInfo(user=cfg.get(marathon_section, 'user'),
                                  password=cfg.get(marathon_section, 'password'),
                                  group=marathon_group)
@@ -1256,7 +1253,7 @@ def read_configuration():
                         cfg_file=pgs_cfg_path,
                         instances=cfg.get(pgs_task_section, 'instances'))
 
-    return ConfigInfo(pgs_mode=pgs_mode,
+    return ConfigInfo(ard_mode=ard_mode,
                       base_config_path=base_config_path,
                       config_file=config_file,
                       ard_db_connect=cfg.get(ard_section, 'dbconnect'),
