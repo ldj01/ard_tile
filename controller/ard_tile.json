@@ -5,7 +5,7 @@
             "forcePullImage": true,
             "image": "losrlcmp02.cr.usgs.gov:5000/tdd-ard-segment:0.0.2",
             "network": "HOST",
-            "parameters": [-c /home/tilest/ARD_determine_segments.conf],
+            "parameters": [],
             "privileged": false
         },
         "type": "DOCKER",
@@ -18,11 +18,6 @@
             {
                 "containerPath": "/etc/localtime",
                 "hostPath": "/etc/localtime",
-                "mode": "RO"
-            },
-            {
-                "containerPath": "/home/tilest/ARD_determine_segments.conf",
-                "hostPath": "/usr/local/usgs/ard_tile/st/ARD_determine_segments.conf",
                 "mode": "RO"
             },
             {
