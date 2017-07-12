@@ -67,17 +67,6 @@ class ArdTileScheduler(mesos.interface.Scheduler):
                 driver.declineOffer(offer.id)
             return
 
-        # Connect to the database.
-#        try:
-#            con = cx_Oracle.connect(l2_db_con)
-#            con.close()
-#        except:
-#            logger.error("Error:  Unable to connect to the database.")
-#            shutdown.shutdown(0, 0)
-#            for offer in offers:
-#                driver.declineOffer(offer.id)
-#            return
-
         for offer in offers:
             if (not self.jobs or
                 self.tasksLaunched - self.tasksFinished == conf.max_jobs or
@@ -197,12 +186,6 @@ class Job():
         input_volume.host_path = conf.indir
         input_volume.container_path = conf.indir
         input_volume.mode = 2  # mesos_pb2.Volume.Mode.RO
-
-#        config_volume = container.volumes.add()
-#        config_volume.host_path = conf.confdir
-#        #config_volume.container_path = conf.confdir
-#        config_volume.container_path = '/mnt/mesos/sandbox/ARD_Clip.conf'
-#        config_volume.mode = 2  # mesos_pb2.Volume.Mode.RO
 
         localtime_volume = container.volumes.add()
         localtime_volume.host_path = '/etc/localtime'
@@ -398,9 +381,9 @@ class Config():
         if not args.disable_creds:
             section = 'mesos'
             if not self.config.has_section(section):
-               logger.error(("Error: {0} section not in config file.")
+                logger.error(("Error: {0} section not in config file.")
                          .format(section))
-               sys.exit(1)
+                sys.exit(1)
             mesos_principal = self.readConfItem(section, 'principal', 0)
             mesos_secret = self.readConfItem(section, 'secret', 0)
             mesos_role = self.readConfItem(section, 'role', 0)
@@ -443,318 +426,145 @@ class Config():
                 mesos_principal, mesos_secret, mesos_role, minscenesperseg)
 
 
-def id_generator(size=6):
-   return ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(size))
 
 def determineSegments(jobs):
 
-   SQL = conf.segment_query
+    SQL = conf.segment_query
  
 
 
-   try:
-      connection = cx_Oracle.connect(l2_db_con)
-   except:
-      logger.error("Unable to connect to the database.")
-      return ERROR
+    try:
+       connection = cx_Oracle.connect(l2_db_con)
+    except:
+       logger.error("Unable to connect to the database.")
+       return ERROR
  
-   cursor = connection.cursor()
-   cursor.execute(SQL)
-   scenes_to_process = cursor.fetchall()
+    cursor = connection.cursor()
+    cursor.execute(SQL)
+    scenes_to_process = cursor.fetchall()
 
-   logger.info("Number of scenes returned from query: {0}".format(len(scenes_to_process)))
-   #logger.info("Complete scene list: {0}".format(scenes_to_process))
+    logger.info("Number of scenes returned from query: {0}".format(len(scenes_to_process)))
+    logger.debug("Complete scene list: {0}".format(scenes_to_process))
 
-   # iterate through scenes to process list building lists that contain
-   # consecutive WRS_ROWS and storing that list in segments_list
-   if len(scenes_to_process) > 0:
-      previous_sat = scenes_to_process[0][5]
-      previous_acq_date = scenes_to_process[0][0].strftime('%Y-%m-%d')
-      previous_wrs_path = scenes_to_process[0][1]
-      previous_wrs_row = scenes_to_process[0][2] -1
-      previous_row = ()
-      consec_wrs_row_list = []
-      segments_list = []
-      for r in scenes_to_process:
-          if r == previous_row:
-             previous_row = r
-             continue
-          previous_row = r
+    # iterate through scenes pulling out only info that we need
+    # i.e. acq_date, path, row, file location and landsat product id
+    reformatted_list = []
+    if len(scenes_to_process) > 0:
+        for r in scenes_to_process:
 
-          # Get complete file name
-          tarFileName = glob.glob(r[3])
-          if len(tarFileName) > 0:
-             # create new tuple with datetime object converted to string
-             new_tuple = r[0].strftime('%Y-%m-%d'), r[1], r[2], tarFileName[0], r[4]
-             current_sat = r[5]
-             current_acq_date = r[0].strftime('%Y-%m-%d')
-             current_wrs_path = r[1]
-             current_wrs_row = r[2]
-             if current_sat != previous_sat:
-             # break in satellite so save consec_wrs_row_list and nullify
-                result = segmentCheck(str(consec_wrs_row_list),0)
-                if result == "OK":
-                   segments_list.append(consec_wrs_row_list)
-                else:
-                   logger.info("Bad segment: {0}, {1}".format(result,consec_wrs_row_list))
-                consec_wrs_row_list = []
-                   
-             elif current_acq_date != previous_acq_date:
-             # broken acquistion date so save consec_wrs_row_list and nullify
-                result = segmentCheck(str(consec_wrs_row_list),0)
-                if result == "OK":
-                   segments_list.append(consec_wrs_row_list)
-                else:
-                   logger.info("Bad segment: {0}, {1}".format(result,consec_wrs_row_list))
-                consec_wrs_row_list = []
-                   
-             elif current_wrs_path != previous_wrs_path:
-                result = segmentCheck(str(consec_wrs_row_list),0)
-                if result == "OK":
-                   segments_list.append(consec_wrs_row_list)
-                else:
-                   logger.info("Bad segment: {0}, {1}".format(result,consec_wrs_row_list))
-                consec_wrs_row_list = []
+            # Get complete file name
+            tarFileName = glob.glob(r[3])
+            if len(tarFileName) > 0:
+                # create new tuple with datetime object converted to string
+                new_tuple = r[0].strftime('%Y-%m-%d'), r[1], r[2], tarFileName[0], r[4]
 
-             elif current_wrs_row-1 != previous_wrs_row:
-                result = segmentCheck(str(consec_wrs_row_list),0)
-                if result == "OK":
-                   segments_list.append(consec_wrs_row_list)
-                else:
-                   logger.info("Bad segment: {0}, {1}".format(result,consec_wrs_row_list))
-                consec_wrs_row_list = []
-
-             # add record to consec_wrs_row_list list
-             consec_wrs_row_list.append(new_tuple)
-             previous_sat = current_sat
-             previous_acq_date = current_acq_date
-             previous_wrs_path = current_wrs_path
-             previous_wrs_row = current_wrs_row
-
-      # add last consec_wrs_row_list to segments_list
-      segments_list.append(consec_wrs_row_list)
-
-      logger.info("Number of segments found: {0}".format(len(segments_list)))
-
-      # order segments_list by length of consec_wrs_row_list
-      segments_list.sort(reverse=True,key=len)
+                # add record to reformatted_list list
+                reformatted_list.append(new_tuple)
 
 
-      processed_scenes_insert = "insert /*+ ignore_row_on_dupkey_index(ARD_PROCESSED_SCENES, SCENE_ID_PK) */ into ARD_PROCESSED_SCENES (scene_id,file_location) values (:1,:2)"
-      segmentAboveThreshold = False
-      # Start segment processing
-      # 1. Loop through segments_list and pass segment (consec scene list) to 
-      #    external program.
-      for segment in segments_list:
-         completed_scene_list = []
-         segment_length = len(segment)
-         if segment_length >= minscenesperseg:
-            segmentAboveThreshold = True
-            logger.info("Segment length: {0}".format(len(segment)))
-            logger.info("Segment: {0}".format(segment))
-            for scene_record in segment:
-               # Build list of scenes here to be used in SQL Insert statement
-               #print scene_record[4]
-               row = (scene_record[4], scene_record[3])
-               completed_scene_list.append(row)
+        # group like satellite, acq_date and paths together in a list
+        temp_segments_list = []
+        for k, g in groupby(reformatted_list, lambda (x):x[4][:4]+x[4][17:25]+x[4][10:13]):
+            temp_segments_list.append(list(g))
 
-               # set 'BLANK' to 'INQUEUE' processing status
-               set_record_to_inqueue(scene_record[4])
+        segments_list = []
+        # group sequential rows together in a list to create a segment
+        for segment in temp_segments_list:
+            for k, g in groupby(enumerate(segment), lambda (i,x):i-x[2]):
+                segments_list.append(map(itemgetter(1), g))
 
-            logger.info("Scenes inserted into ARD_PROCESSED_SCENES table: {0}".format(completed_scene_list))
-            cursor.bindarraysize = len(completed_scene_list)
-            cursor.prepare(processed_scenes_insert)
-            cursor.executemany(None, completed_scene_list)
-            connection.commit()
+        logger.info("Number of segments found: {0}".format(len(segments_list)))
 
-            # Build the Docker command.
-            cmd = ['ARD_Clip_L457.py']
-            if segment[0][4][:4] == 'LC08':
-               cmd = ['ARD_Clip_L8.py']
+        # order segments_list by length of consec_wrs_row_list
+        segments_list.sort(reverse=True,key=len)
 
 
-            cmd.extend(['"' + str(segment) + '"', conf.outdir + "/lta_incoming"])
+        processed_scenes_insert = "insert /*+ ignore_row_on_dupkey_index(ARD_PROCESSED_SCENES, SCENE_ID_PK) */ into ARD_PROCESSED_SCENES (scene_id,file_location) values (:1,:2)"
+        segmentAboveThreshold = False
+        # Start segment processing
+        # 1. Loop through segments_list and pass segment (consec scene list) to 
+        #    external program.
+        for segment in segments_list:
+            completed_scene_list = []
+            segment_length = len(segment)
+            if segment_length >= minscenesperseg:
+                segmentAboveThreshold = True
+                logger.info("Segment length: {0}".format(len(segment)))
+                logger.info("Segment: {0}".format(segment))
+                for scene_record in segment:
+                    # Build list of scenes here to be used in SQL Insert statement
+                    row = (scene_record[4], scene_record[3])
+                    completed_scene_list.append(row)
 
-            # Compile the job information.
-            job = Job()
-            #job_id = id_generator(10)
-            # job_id = path, first row, last row, acq_date
-            job_id = str(segment[0][1]).zfill(3) + '-' + str(segment[0][2]).zfill(3) + '-' + str(segment[len(segment)-1][2]).zfill(3) + '-' + segment[0][0]
-            job.cpus = conf.cpus
-            job.disk = conf.disk
-            job.mem = conf.memory
-            job.command = ' '.join(cmd)
-######           job.logdir = ('{0}').format(conf.outdir)
-            job.job_id = job_id
-            jobs.append(job)
+                    # set 'BLANK' to 'INQUEUE' processing status
+                    set_scene_to_inqueue(connection, scene_record[4])
 
-      if not segmentAboveThreshold:
-         logger.info("No segments found that meet the {0} scenes per segment minimum".format(minscenesperseg))
+                logger.info("Scenes inserted into ARD_PROCESSED_SCENES table: {0}".format(completed_scene_list))
+                cursor.bindarraysize = len(completed_scene_list)
+                cursor.prepare(processed_scenes_insert)
+                cursor.executemany(None, completed_scene_list)
+                connection.commit()
 
-      # Insert scene list into ARD_PROCESSED_SCENES table
-
-#      if len(completed_scene_list) > 0:
-#         logger.info("Scenes inserted into ARD_PROCESSED_SCENES table: {0}".format(completed_scene_list))
-#         cursor.bindarraysize = len(completed_scene_list)
-#         cursor.prepare(processed_scenes_insert)
-#         cursor.executemany(None, completed_scene_list)
-#         connection.commit()
-   else:
-      logger.info("There are no scenes ready to process.")
-
-
-   cursor.close()
-   connection.close()
-   return SUCCESS
-
-def determineSegments2(jobs):
-
-   SQL = conf.segment_query
- 
+                # Build the Docker command.
+                cmd = ['ARD_Clip_L457.py']
+                if segment[0][4][:4] == 'LC08':
+                    cmd = ['ARD_Clip_L8.py']
 
 
-   try:
-      connection = cx_Oracle.connect(l2_db_con)
-   except:
-      logger.error("Unable to connect to the database.")
-      return ERROR
- 
-   cursor = connection.cursor()
-   cursor.execute(SQL)
-   scenes_to_process = cursor.fetchall()
+                cmd.extend(['"' + str(segment) + '"', conf.outdir + "/lta_incoming"])
 
-   logger.info("Number of scenes returned from query: {0}".format(len(scenes_to_process)))
-   #logger.info("Complete scene list: {0}".format(scenes_to_process))
+                # Compile the job information.
+                job = Job()
+                # job_id format: <sat>_<path>_<lowest_wrs_row>_<highest_wrs_row>_<acq_date>
+                # example:        L7-047-027-030-2016-09-28
+                job_id = "L{4}-{0:03}-{1:03}-{2:03}-{3}".format(segment[0][1],
+                    segment[0][2], segment[len(segment)-1][2], segment[0][0],
+                    segment[0][4][3:4])
+                job.cpus = conf.cpus
+                job.disk = conf.disk
+                job.mem = conf.memory
+                job.command = ' '.join(cmd)
+                job.job_id = job_id
+                jobs.append(job)
 
-   # iterate through scenes pulling out only info that we need
-   # i.e. acq_date, path, row, file location and landsat product id
-   reformatted_list = []
-   if len(scenes_to_process) > 0:
-      previous_row = ()
-      for r in scenes_to_process:
-          if r == previous_row:
-             previous_row = r
-             continue
-          previous_row = r
-
-          # Get complete file name
-          tarFileName = glob.glob(r[3])
-          if len(tarFileName) > 0:
-             # create new tuple with datetime object converted to string
-             new_tuple = r[0].strftime('%Y-%m-%d'), r[1], r[2], tarFileName[0], r[4]
-
-             # add record to reformatted_list list
-             reformatted_list.append(new_tuple)
+        if not segmentAboveThreshold:
+            logger.info("No segments found that meet the {0} scenes per segment minimum".format(minscenesperseg))
 
 
-      # group like satellite, acq_date and paths together in a list
-      temp_segments_list = []
-      for k, g in groupby(reformatted_list, lambda (x):x[4][:4]+x[4][17:25]+x[4][10:13]):
-        #print list(g)
-        temp_segments_list.append(list(g))
-
-      #print temp_segments_list
-      segments_list = []
-      # group sequential rows together in a list to create a segment
-      for segment in temp_segments_list:
-         for k, g in groupby(enumerate(segment), lambda (i,x):i-x[2]):
-            segments_list.append(map(itemgetter(1), g))
-
-      logger.info("Number of segments found: {0}".format(len(segments_list)))
-
-      # order segments_list by length of consec_wrs_row_list
-      segments_list.sort(reverse=True,key=len)
+    else:
+        logger.info("There are no scenes ready to process.")
 
 
-      processed_scenes_insert = "insert /*+ ignore_row_on_dupkey_index(ARD_PROCESSED_SCENES, SCENE_ID_PK) */ into ARD_PROCESSED_SCENES (scene_id,file_location) values (:1,:2)"
-      segmentAboveThreshold = False
-      # Start segment processing
-      # 1. Loop through segments_list and pass segment (consec scene list) to 
-      #    external program.
-      for segment in segments_list:
-         completed_scene_list = []
-         segment_length = len(segment)
-         if segment_length >= minscenesperseg:
-            result = segmentCheck(str(segment),0)
-            if result == "OK":
-               segmentAboveThreshold = True
-               logger.info("Segment length: {0}".format(len(segment)))
-               logger.info("Segment: {0}".format(segment))
-               for scene_record in segment:
-                  # Build list of scenes here to be used in SQL Insert statement
-                  #print scene_record[4]
-                  row = (scene_record[4], scene_record[3])
-                  completed_scene_list.append(row)
+    cursor.close()
+    connection.close()
+    return SUCCESS
 
-                  # set 'BLANK' to 'INQUEUE' processing status
-                  set_record_to_inqueue(scene_record[4])
-
-               logger.info("Scenes inserted into ARD_PROCESSED_SCENES table: {0}".format(completed_scene_list))
-               cursor.bindarraysize = len(completed_scene_list)
-               cursor.prepare(processed_scenes_insert)
-               cursor.executemany(None, completed_scene_list)
-               connection.commit()
-
-               # Build the Docker command.
-               cmd = ['ARD_Clip_L457.py']
-               if segment[0][4][:4] == 'LC08':
-                  cmd = ['ARD_Clip_L8.py']
-
-
-               cmd.extend(['"' + str(segment) + '"', conf.outdir + "/lta_incoming"])
-
-               # Compile the job information.
-               job = Job()
-               job_id = str(segment[0][1]).zfill(3) + '-' + str(segment[0][2]).zfill(3) + '-' + str(segment[len(segment)-1][2]).zfill(3) + '-' + segment[0][0]
-               job.cpus = conf.cpus
-               job.disk = conf.disk
-               job.mem = conf.memory
-               job.command = ' '.join(cmd)
-               job.job_id = job_id
-               jobs.append(job)
-            else:
-               logger.info("Bad segment: {0}, {1}".format(result,segment))
-
-      if not segmentAboveThreshold:
-         logger.info("No segments found that meet the {0} scenes per segment minimum".format(minscenesperseg))
-
-
-   else:
-      logger.info("There are no scenes ready to process.")
-
-
-   cursor.close()
-   connection.close()
-   return SUCCESS
-def set_record_to_inqueue(scene_id):
+def set_scene_to_inqueue(connection, scene_id):
 
    updatesql = "update ARD_PROCESSED_SCENES set PROCESSING_STATE = 'INQUEUE' where scene_id = '" + scene_id + "'"
 
-   connection2 = None
-
    try:
-      connection2 = cx_Oracle.connect(l2_db_con)
+       cursor = connection.cursor()
+       cursor.execute(updatesql)
+       connection.commit()
    except:
-      logger.error("Unable to connect to the database.")
-      return ERROR
- 
-   cursor = connection2.cursor()
-   cursor.execute(updatesql)
-   cursor.close()
-   connection2.commit()
-   connection2.close()
+       logger.error("set_scene_to_inqueue:  ERROR updating PROCESSING_STATE in ARD_PROCESSED_SCENES table")
+       raise
 
-   return SUCCESS
+   finally:
+       cursor.close()
+
+
 
 def reset_records():
 
-   updatesql = "update ARD_PROCESSED_SCENES set PROCESSING_STATE = 'BLANK' where PROCESSING_STATE in ('INWORK','INQUEUE')"
+   updatesql = "update ARD_PROCESSED_SCENES set PROCESSING_STATE = 'BLANK', DATE_PROCESSED = sysdate where PROCESSING_STATE in ('INWORK','INQUEUE')"
 
    try:
       connection = cx_Oracle.connect(l2_db_con)
    except:
       logger.error("Unable to connect to the database.")
-      return ERROR
+      raise
  
    cursor = connection.cursor()
    cursor.execute(updatesql)
@@ -762,85 +572,12 @@ def reset_records():
    connection.commit()
    connection.close()
 
-   return SUCCESS
-
-def segmentCheck(fullSegment, knt):
-
-    result = ''
-
-                  # Gather information about the first scene
-                  
-    paren1 = fullSegment.find("(")
-    
-    date1start = fullSegment.find("'", paren1)
-    date1end = fullSegment.find("'", date1start+1)
-    firstDate = fullSegment[date1start+1:date1end]
-
-    path1start = fullSegment.find(",", date1end)
-    path1end = fullSegment.find(",", path1start+1)
-    firstPathStr = fullSegment[path1start+2:path1end]
-    firstPath = int(firstPathStr)
-
-    sat1start = fullSegment.find(".gz", paren1)
-    sat1end = fullSegment.find("'", sat1start+1)
-    firstSat = fullSegment[sat1start+7:sat1start+11]
-
-                   # Check each following scene against the first
-    paren1 = fullSegment.find("(",sat1end)
-                   
-    while (paren1 > -1):
-        paren2 = fullSegment.find(")", paren1)
-        sceneInfo = fullSegment[paren1+1:paren2]
-
-        dateStart = sceneInfo.find("('", sat1end)
-        dateEnd = sceneInfo.find("'", dateStart+3)
-        nextDate = sceneInfo[dateStart+2:dateEnd]
-
-        pathStart = sceneInfo.find(",", dateEnd)
-        pathEnd = sceneInfo.find(",", pathStart+1)
-        pathStr = sceneInfo[pathStart+2:pathEnd]
-        path = int(pathStr)
-
-        satStart = sceneInfo.find(".gz", pathEnd)
-        satEnd = sceneInfo.find("'", satStart+1)
-        Sat = sceneInfo[satStart+7:satStart+11]
-
-
-        #if (knt == 1):
-        #    print 'pos = ' + str(date1start)
-        #    print 'pos = ' + str(date1end)
-        #    print 'sceneInfo = ' + sceneInfo
-        #    print 'firstDate = ' + firstDate
-        #    print 'firstPathStr = ' + firstPathStr
-        #    print 'firstSat = ' + firstSat
-
-        #    print 'nextDate = ' + nextDate
-        #    print 'nextPath = ' + str(path)
-        #    print 'nextSat = ' + Sat
-
-        if not (firstDate == nextDate):
-            result = "Bad Dates: " + firstDate + "/" + nextDate
-    
-        if not (firstPath == path):
-            result = result + "  Bad Paths: " + str(firstPath) + "/" + str(path)
-
-        if not (firstSat == Sat):
-            result = result + "  Bad Satellites: " + firstSat + "/" + Sat
-        
-        paren1 = fullSegment.find("(", paren2)
-
-    if (result == ''):
-        return 'OK'
-        
-    return result
 
 # Main processing block
 if __name__ == "__main__":
 
     setup_logging()
 
-    l2_db_con = 'L2_BRIDGE/L2b123@lsdsscant.cr.usgs.gov:1521/crdev'
-    minscenesperseg = 3
 
     # Read the configuration information and command-line arguments.
     conf = Config()
@@ -848,9 +585,9 @@ if __name__ == "__main__":
         mesos_role, minscenesperseg = conf.readConfig(sys.argv)
 
     logger.info('******************Start************')
-    logger.info('             DB connection: {0}'.format(l2_db_con))
-    logger.info("             MinSenesPerSeg: {0}".format(minscenesperseg))
-    logger.info('             Segment query: {0}'.format(conf.segment_query))
+    logger.debug('DB connection: {0}'.format(l2_db_con))
+    logger.debug("Minimum Senes Per Seg: {0}".format(minscenesperseg))
+    logger.debug('Segment query: {0}'.format(conf.segment_query))
 
     # reset any 'INWORK' and 'INQUEUE' to 'BLANK' processing status
     reset_records()
@@ -907,7 +644,7 @@ if __name__ == "__main__":
             break
 
         # If the job queue is empty, get work.
-        if (not mesosScheduler.jobs and determineSegments2(mesosScheduler.jobs) == ERROR):
+        if (not mesosScheduler.jobs and determineSegments(mesosScheduler.jobs) == ERROR):
             driver.stop(True)
             sys.exit(1)
 
@@ -921,11 +658,10 @@ if __name__ == "__main__":
                    mesosScheduler.tasksFinished == conf.max_jobs):
                 time.sleep(20)
             while not mesosScheduler.jobs:
-                if determineSegments2(mesosScheduler.jobs) == ERROR:
+                if determineSegments(mesosScheduler.jobs) == ERROR:
                     driver.stop(True)
                     sys.exit(1)
                 time.sleep(20)
                 
             driver.reviveOffers()
    
-    logger.info('*******************End*******************')
