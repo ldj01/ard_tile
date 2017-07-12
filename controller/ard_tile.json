@@ -34,7 +34,7 @@
             "cache": false,
             "executable": false,
             "extract": true,
-            "uri": "/usr/local/usgs/bridge/docker.tar.gz"
+            "uri": "/usr/local/usgs/ard_tile/docker.tar.gz"
         }
     ],
     "healthChecks": [
