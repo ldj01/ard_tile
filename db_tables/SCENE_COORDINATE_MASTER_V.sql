@@ -23,7 +23,7 @@ AS
                     TO_NUMBER (CORNER_UL_LON) CORNER_UL_LON,
                     TO_NUMBER (CORNER_UR_LAT) CORNER_UR_LAT,
                     TO_NUMBER (CORNER_UR_LON) CORNER_UR_LON
-      FROM ll0arcb.etm_scene_inventory@inv_link a
+      FROM ll0arcb.etm_scene_inventory@inv_l2_bridge_link a
            JOIN l2_bridge.l2_albers_inventory b
               ON a.landsat_scene_id = b.landsat_scene_id
     UNION
@@ -37,7 +37,7 @@ AS
                     TO_NUMBER (CORNER_UL_LON) CORNER_UL_LON,
                     TO_NUMBER (CORNER_UR_LAT) CORNER_UR_LAT,
                     TO_NUMBER (CORNER_UR_LON) CORNER_UR_LON
-      FROM ll0arcb.tm_scene_inventory@inv_link a
+      FROM ll0arcb.tm_scene_inventory@inv_l2_bridge_link a
            JOIN l2_bridge.l2_albers_inventory b
               ON a.landsat_scene_id = b.landsat_scene_id
     UNION
@@ -52,7 +52,6 @@ AS
                     TO_NUMBER (CORNER_UR_LAT) CORNER_UR_LAT,
                     TO_NUMBER (CORNER_UR_LON) CORNER_UR_LON
       FROM inventory.lmd_l1_scene_coordinate a
-           JOIN inventory.lmd_scene b
-              ON a.lmd_scene_id = b.lmd_scene_id
+           JOIN inventory.lmd_scene b ON a.lmd_scene_id = b.lmd_scene_id
            JOIN L2_BRIDGE.L2_ALBERS_INVENTORY c
               ON c.landsat_scene_id = b.landsat_scene_id);
