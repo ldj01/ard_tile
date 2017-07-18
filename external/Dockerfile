@@ -29,20 +29,6 @@ RUN yum group install -y "Development Tools" \
     && yum clean metadata
 
 
-# Update git to a version that isn't broken
-RUN cd /usr/local/src \
-    && git clone \
-        --depth 1 \
-        --branch v2.9.2 \
-        https://github.com/git/git.git git.git \
-    && cd git.git \
-    && make configure \
-    && ./configure --without-tcltk \
-    && make \
-    && make install \
-    && cd .. \
-    && rm -rf git.git
-
 
 # Source and installation locations
 ENV PREFIX=/usr/local \
@@ -65,7 +51,8 @@ ENV PREFIX=/usr/local \
     NETCDF4_PREFIX=/usr/local \
     HDFEOS_PREFIX=/usr/local \
     PROJ4_PREFIX=/usr/local \
-    GDAL_PREFIX=/usr/local
+    GDAL_PREFIX=/usr/local \
+    GEOS_PREFIX=/usr/local
 
 
 # Include and library paths
@@ -183,9 +170,21 @@ RUN pip install --upgrade pip \
         python-dateutil==2.5.3 \
         requests==2.10.0 \
         lxml==3.6.0 \
-        numpy==1.11.0 \
-        matplotlib==1.5.1
+        numpy==1.11.0
 
+
+# Install GEOS
+COPY external_tools/geos-3.6.1.tar $SRC_DIR
+RUN cd $SRC_DIR \
+    && tar -xvf geos-3.6.1.tar \
+    && cd geos-3.6.1 \
+    && ./configure --prefix=$GEOS_PREFIX \
+        --enable-shared \
+        --enable-static \
+    && make \
+    && make install \
+    && cd $SRC_DIR \
+    && rm -rf geos-3.6.1 geos-3.6.1.tar
 
 # Install GDAL
 COPY external_tools/gdal-1.11.4.tar.gz $SRC_DIR
@@ -195,6 +194,7 @@ RUN cd $SRC_DIR \
     && ./configure --prefix=$GDAL_PREFIX \
         --with-liblzma \
         --with-python=yes \
+        --with-geos=yes \
         --with-static-proj4=$PROJ4_LIB \
         --enable-shared \
         --enable-static \
