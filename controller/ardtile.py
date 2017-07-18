@@ -631,6 +631,12 @@ def get_command_line_arguments():
                        default=False,
                        help='display scene success information')
 
+    sub_p.add_argument('--error',
+                       action='store_true',
+                       dest='error',
+                       default=False,
+                       help='display scene error information')
+
     sub_p.add_argument('--tsuccess',
                        action='store_true',
                        dest='tsuccess',
@@ -735,6 +741,12 @@ def get_command_line_arguments():
                        default=False,
                        help='display Product IDs in the REINITLZD state')
 
+    group.add_argument('--error',
+                       action='store_true',
+                       dest='error',
+                       default=False,
+                       help='display Product IDs in the ERROR state')
+
     # ---------------------------------
     description = 'Displays the Mesos and Marathon leaders'
     sub_p = subparsers.add_parser('leaders',
@@ -802,6 +814,7 @@ def status(args, cfg):
                     not args.reinit and
                     not args.processing and
                     not args.remaining and
+                    not args.error and
                     not args.tsuccess and
                     not args.tasks):
         find_all = True
@@ -813,7 +826,7 @@ def status(args, cfg):
             print('-'*60)
             print(STATUS_DATE_GREEN.format(str(datetime.now())))
             print('-'*60)
-            if find_all or args.success or args.ready or args.reinit or args.processing or args.remaining:
+            if find_all or args.success or args.ready or args.reinit or args.processing or args.remaining or args.error:
                 print(HEADING_BLUE.format('Product ID STATUS'))
 
             db_con = cx_Oracle.connect(cfg.ard_db_connect)
@@ -875,6 +888,13 @@ def status(args, cfg):
                         db_cur.execute(select_stmt)
                         value = int(db_cur.fetchone()[0])
                         print(STATUS_FMT.format('REMAINING', value))
+
+                    if find_all or args.error:
+                        select_stmt = base_stmt.format(DB_ARD_SCENES, date_range,
+                                                       'ERROR')
+                        db_cur.execute(select_stmt)
+                        value = int(db_cur.fetchone()[0])
+                        print(STATUS_FMT.format('ERROR', value))
 
                     if find_all or args.tsuccess:
                         print
@@ -1146,9 +1166,9 @@ def list_ids(args, cfg):
         db_cur = db_con.cursor()
         try:
 
-            l47_select = ("select scene_id "
+            l47_select = ("select scene_id, DATE_PROCESSED "
                           " from {0}"
-                          " where processing_state = '{1}'")
+                          " where processing_state = '{1}' order by DATE_PROCESSED")
 
             if args.processing:
                 select_stmt = l47_select.format(DB_ARD_SCENES, 'INWORK')
@@ -1156,6 +1176,10 @@ def list_ids(args, cfg):
 
             elif args.ready:
                 select_stmt = l47_select.format(DB_ARD_SCENES, 'INQUEUE')
+                db_cur.execute(select_stmt)
+
+            elif args.error:
+                select_stmt = l47_select.format(DB_ARD_SCENES, 'ERROR')
                 db_cur.execute(select_stmt)
 
             else:
