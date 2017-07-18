@@ -558,7 +558,7 @@ def set_scene_to_inqueue(connection, scene_id):
 
 def reset_records():
 
-   updatesql = "update ARD_PROCESSED_SCENES set PROCESSING_STATE = 'BLANK', DATE_PROCESSED = sysdate where PROCESSING_STATE in ('INWORK','INQUEUE')"
+   updatesql = "update ARD_PROCESSED_SCENES set PROCESSING_STATE = 'BLANK', DATE_PROCESSED = sysdate where PROCESSING_STATE in ('INWORK','INQUEUE','ERROR')"
 
    try:
       connection = cx_Oracle.connect(l2_db_con)
@@ -589,7 +589,7 @@ if __name__ == "__main__":
     logger.debug("Minimum Senes Per Seg: {0}".format(minscenesperseg))
     logger.debug('Segment query: {0}'.format(conf.segment_query))
 
-    # reset any 'INWORK' and 'INQUEUE' to 'BLANK' processing status
+    # reset any 'INWORK', 'INQUEUE' and 'ERROR' to 'BLANK' processing status
     reset_records()
 
     # Establish framework, executor, and authentication credentials
