@@ -1,5 +1,26 @@
 #!/usr/bin/python
 
+import os
+import traceback
+import tarfile
+import datetime
+import sys
+import glob
+import shutil
+import hashlib
+from subprocess import call
+import cx_Oracle
+import logging
+
+
+from ARD_HelperFunctions import getARDName, readCmdLn, readConfig, stageFiles
+from ARD_HelperFunctions import insert_tile_record
+from ARD_HelperFunctions import makeMetadataString, raster_value_count
+from ARD_HelperFunctions import getProductionDateTime, parseSceneHistFile, setup_logging
+from ARD_HelperFunctions import getTilesAndScenesLists
+from ARD_regionLU import pathrow2regionLU
+from ARD_metadata import buildMetadata
+
 # ==========================================================================
 #
 #   ARD Processing Script
@@ -11,10 +32,6 @@
 #  These variables should be checked for each "run" of this script.  They will affect filenames and file contents.
 #
 appVersion = "ARD Tile 1.0"                              # Currently unused... if used, would end up in the metadata
-ARDversion = "_V01"                                           # Used in the filename for every tile band
-connstr = 'L2_BRIDGE/L2b123@lsdsscant.cr.usgs.gov:1521/crdev'
-soap_envelope = "Nothing"
-debug = False                                        #true = output file,  false = stdout
 
 				                                       # Landsat 8 crosswalk
 filenameCrosswalk = [('toa_band1', 'TAB1'), ('toa_band2', 'TAB2'), ('toa_band3', 'TAB3'), \
@@ -59,116 +76,7 @@ gdalmergeLoc = "/usr/local/bin/gdal_merge.py"
 #
 # ==========================================================================
 
-import os
-import traceback
-import tarfile
-import datetime
-import sys
-import glob
-import shutil
-import hashlib
-from subprocess import call
-import ast
-import cx_Oracle
-import ConfigParser
-import urllib2
-import logging
 
-
-from ARD_HelperFunctions import logIt, appendToLog, reportToStdout, getARDName
-from ARD_HelperFunctions import getTileFootprintCoords, makeMetadataString, raster_value_count
-from ARD_HelperFunctions import getProductionDateTime, parseSceneHistFile, setup_logging
-from ARD_tilesForSceneLU import tilesForSceneLU
-from ARD_scenesForTilePathLU import scenesForTilePathLU
-from ARD_regionLU import pathrow2regionLU
-from ARD_metadata import *
-
-from CU_tileFootprints import CU_tileFootprints
-from AK_tileFootprints import AK_tileFootprints
-from HI_tileFootprints import HI_tileFootprints
-
-# ----------------------------------------------------------------------------------------------
-#
-#   Purpose:  Command line argument parsing
-#
-def readCmdLn(argv):
-   logger.info('argv count: {0}'.format(len(argv)))
-   logger.info('argv : {0}'.format(argv))
-
-   if len(argv) != 3:
-      logger.info("need one command line argument")
-      logger.info("example:  ARD_Clip.py '[('2013-07-09',40,29,")
-      logger.info("                          '/hsm/lsat1/IT/collection01/etm/A1_L2/2012/33/36/LE07_L1TP_033036_20121220_20160909_01_A1.tar.gz',")
-      logger.info("                          'LE07_L1TP_033036_20121220_20160909_01_A1'),")
-      logger.info("                        ('2013-07-09',40,30,")
-      logger.info("                          '/hsm/lsat1/IT/collection01/etm/A1_L2/2012/37/37/LE07_L1TP_037037_20121216_20160909_01_A1.tar.gz',")
-      logger.info("                          'LE07_L1TP_037037_20121216_20160909_01_A1')]")
-      logger.info("                        /hsm/lsat1/ST/collection01/lta_incoming")
-      exit (1)
-
-   try:
-      segment = ast.literal_eval(argv[1])
-      output_path = argv[2]
-      return (segment, output_path)
-   except Exception as e:
-      logger.error('        Error: {0}'.format(e))
-      sys.exit(0)
-
-
-# ----------------------------------------------------------------------------------------------
-#
-#   Purpose:  Reads values from config file
-#
-def readConfig():
-
-    logger.info("readConfig")
-    Config = ConfigParser.ConfigParser()
-    if len(Config.read("ARD_Clip.conf")) > 0:
-        logger.info("Found ARD_Clip.conf")
-        section = 'SectionOne'
-        if Config.has_section(section):
-           if Config.has_option(section, 'dbconnect'):
-              global connstr
-              connstr = Config.get(section, 'dbconnect')
-           if Config.has_option(section, 'version'):
-              global version
-              version = Config.get(section, 'version')
-              logger.info("version: {0}".format(version))
-           if Config.has_option(section, 'soap_envelope_template'):
-              global soap_envelope
-              soap_envelope = Config.get(section, 'soap_envelope_template')
-           if Config.has_option(section, 'debug'):
-              global debug
-              debug = Config.getboolean(section, 'debug')
-
-# ----------------------------------------------------------------------------------------------
-#
-#   Purpose:  Request required L2 scene bundles be moved to fastest cache
-#                     available.
-#
-def stageFiles(segment,soap_envelope):
-    try:
-       logger.info('Start staging...')
-       url="https://dds.cr.usgs.gov/HSMServices/HSMServices?wsdl"
-       headers = {'content-type': 'text/xml'}
-
-       files = ''
-       for scene_record in segment:
-           files = files + '<files>' + scene_record[3] + '</files>'
-       soap_envelope = soap_envelope.replace("#################", files)
-
-       logger.info('SOAP Envelope: {0}'.format(soap_envelope))
-       request_object = urllib2.Request(url, soap_envelope, headers)
-
-       response = urllib2.urlopen(request_object)
-
-       html_string = response.read()
-       logger.info('Stage response: {0}'.format(html_string))
-    except Exception as e:
-       logger.error('Error staging files: {0}.  Continue anyway.'.format(e))
-
-    else:
-       logger.info('Staging succeeded...')
 
 
 # ----------------------------------------------------------------------------------------------
@@ -181,11 +89,12 @@ def processScenes(segment):
                              # Session log, if we are in debug mode
                                    
     currentTime = datetime.datetime.now()
-    logger.info('Start...')
 
     process_date = currentTime.strftime('%Y%m%d')
     sceneCtr = 0
     for scene_record in segment:
+
+        sceneState = "COMPLETE"
 
         # update PROCESSING_STATE in ARD_PROCESSED_SCENES to 'INWORK'
         updatesql = "update ARD_PROCESSED_SCENES set PROCESSING_STATE = 'INWORK' where scene_id = '" + scene_record[4] + "'"
@@ -196,7 +105,6 @@ def processScenes(segment):
         logger.info("Scene {0} is INWORK.".format(scene_record[4]))
 
                              # Current scene to process
-        #reportToStdout scene_record
         targzName = scene_record[4] + '.tar.gz'
         acqdate = scene_record[0]
 
@@ -207,16 +115,25 @@ def processScenes(segment):
         targzYear = acqdate[:4]
         scene_id_parts = scene_record[4].split("_")
 
-        logger.info("targzMission: {0} targzPath: {1} targzRow: {2} targzYear: {3}".format(targzMission, targzPath,targzRow, targzYear))
+        logger.debug("targzMission: {0} targzPath: {1} targzRow: {2} targzYear: {3}".format(targzMission, targzPath,targzRow, targzYear))
 
 
-                             # Intersect scene with tile index to determine which tiles must be produced
 
-        reqdTilesHV = tilesForSceneLU[targzPath+targzRow]
-        logger.info("path: {0} row: {1}".format(targzPath,targzRow))
+        logger.debug("path: {0} row: {1}".format(targzPath,targzRow))
         region = pathrow2regionLU[targzPath+targzRow]
-        logger.info("region: {0}".format(region))
+        logger.debug("region: {0}".format(region))
 
+        # Intersect scene with tile index to determine which tiles must be produced
+        # Get tiles for scene and for each tile a list of path/rows
+        # Pass in db connection, landsatProductId, region, WRSPath, WRSRow
+        tileAndSceneInfo = getTilesAndScenesLists(connection,
+                                                  scene_record[4],
+                                                  region, scene_record[1],
+                                                  scene_record[2],
+                                                  logger)
+
+        reqdTilesHV = tileAndSceneInfo[0]
+        scenesForTilePathLU = tileAndSceneInfo[1]
 
         logger.info('Number of tiles to create: {0}'.format(len(reqdTilesHV)))
 
@@ -227,22 +144,15 @@ def processScenes(segment):
             productionDateTime = getProductionDateTime()
             tileErrorHasOccurred = False 
 
-            if region == 'CU':
-                cutLimits = getTileFootprintCoords(curTile, CU_tileFootprints)
-            elif region == 'AK':
-                cutLimits = getTileFootprintCoords(curTile, AK_tileFootprints)
-            elif region == 'HI':
-                cutLimits = getTileFootprintCoords(curTile, HI_tileFootprints)
+            cutLimits = ' '.join(map(str,curTile[1]))
 
-            tile_id = scene_id_parts[0] + '_' + region + '_' + curTile[0]+curTile[1] + '_' + scene_id_parts[3] + '_' + process_date + '_C' + scene_id_parts[5] + ARDversion
+            tile_id = scene_id_parts[0] + '_' + region + '_' + curTile[0][0]+curTile[0][1] + '_' + scene_id_parts[3] + '_' + process_date + '_C' + scene_id_parts[5] + version
             logger.info("tileid: {0}".format(tile_id))
-            logger.info("cutlimits: {0}".format(cutLimits))
+            logger.debug("cutlimits: {0}".format(cutLimits))
 
             # See if tile_id exists in ARD_COMPLETED_TILES table
 
             SQL="select tile_id, contributing_scenes, complete_tile from ARD_COMPLETED_TILES where tile_id = '" + tile_id + "'"
- 
-            #reportToStdout(SQL)
  
             cursor = connection.cursor()
             cursor.execute(SQL)
@@ -255,26 +165,25 @@ def processScenes(segment):
                 logger.info("create tile")
 
                 
-                # Intersect this tile with the scenes to determine which
-                # scenes will contribute to the tile.   Unpack each tar file 
+                # Get scenes that will contribute to the tile.
+                # Unpack each tar file
                 # if necessary.
-                scenesForTilePath = scenesForTilePathLU[curTile[0]+curTile[1]+targzPath]
-                logger.info('# Scenes needed for tile: {0}: {1}'.format(tile_id,len(scenesForTilePath)))
+                scenesForTilePath = scenesForTilePathLU[curTile[0][0]+curTile[0][1]+targzPath]
+                logger.debug('# Scenes needed for tile: {0}: {1}'.format(tile_id,len(scenesForTilePath)))
          
                 contributingScenes = []
                 contributingScenesforDB = []
                 for pathRow in scenesForTilePath:
                     # LE07_L2TP_026028_19990709_20161112_01_A1
-                    #contrib_scene_id = targzName[:10] + pathRow[0] + pathRow[1] + targzName[16:25]
                     contrib_scene_id = pathRow[0] + pathRow[1] + targzName[16:25]
-                    logger.info("          Contributing scene: {0}".format(contrib_scene_id))
+                    logger.debug("          Contributing scene: {0}".format(contrib_scene_id))
                     ######## Find hsm path for scene in segment ######
                     contrib_scene_rec = []
                     for scene_record2 in segment:
                        if scene_record2[4].find(contrib_scene_id) > -1:
                           scene_tuple = (scene_record2[3], scene_record2[4])
                           contrib_scene_rec.append(scene_tuple)
-                    logger.info("Contributing scene from segment: {0}".format(contrib_scene_rec))
+                    logger.debug("Contributing scene from segment: {0}".format(contrib_scene_rec))
 
                     #################################################
 
@@ -313,11 +222,12 @@ def processScenes(segment):
    
                 logger.info('Tile: {0}  - Number of contributing scenes: {1}'.format(tile_id, len(contributingScenes)))
    
-                                # Incorrect number of contributing scenes, continue to next tile
+                # Maximum # of scenes that can contribute to a tile is 3
    
                 if (len(contributingScenes) > 3) or (len(contributingScenes) < 1):
                     logger.info('Skipping tile - Unexpected number of scenes = {0}'.format(len(contributingScenes)))
                     tileErrorHasOccurred = True
+                    sceneState = "ERROR"
                     continue
    
                 sceneInfoList = []
@@ -356,6 +266,7 @@ def processScenes(segment):
                             logger.error('Error creating scene directory: {0}'.format(sceneDir ))
                             logger.error('        Error: {0}'.format(traceback.format_exc()))
                             tileErrorHasOccurred = True
+                            sceneState = "ERROR"
                             continue
    
                         logger.info('Created scene directory: {0}'.format(sceneDir))
@@ -368,6 +279,7 @@ def processScenes(segment):
                             logger.error('Error un-tarring: {0}'.format(thisTar))
                             logger.error('        Error: {0}'.format(traceback.format_exc()))
                             tileErrorHasOccurred = True
+                            sceneState = "ERROR"
                             continue
                         logger.info('End unpacking tar')
    
@@ -492,7 +404,6 @@ def processScenes(segment):
              
                                    # Set up the tile output directory
       
-                #tileDir = os.path.join(curDir, 'tile_' + curTile[0] + curTile[1] + '_' + targzYear + acqMonth + acqDay)
                 tileDir = tile_id
           
                 if (not os.path.isdir(tileDir)):
@@ -503,6 +414,7 @@ def processScenes(segment):
                         logger.error('Error creating tile directory: {0}'.format(tileDir))
                         logger.error('        Error: {0}'.format(traceback.format_exc()))
                         tileErrorHasOccurred = True
+                        sceneState = "ERROR"
                         continue
       
                     logger.info('Created tile directory: {0}'.format(tileDir))
@@ -554,6 +466,7 @@ def processScenes(segment):
                     if (newARDname == 'ERROR'):
                         logger.error('Error in filenameCrosswalk for: {0}'.format(curBand))
                         tileErrorHasOccurred = True
+                        sceneState = "ERROR"
                         continue
                     mosaicFileName = tile_id + '_' + newARDname + '.tif'
                     lineageTifName = tile_id + '_LINEAGEQA.tif'
@@ -572,6 +485,7 @@ def processScenes(segment):
                             logger.error('Error: warpCmd - 1 contributing scene')
                             logger.error('        Error: {0}'.format(traceback.format_exc()))
                             tileErrorHasOccurred = True
+                            sceneState = "ERROR"
                             continue
                                                                    
                         if (curBand == 'toa_band1'):                                 # needed for lineage file generation later
@@ -596,6 +510,7 @@ def processScenes(segment):
                             logger.error('Error: warpCmd - 2 contributing scenes')
                             logger.error('        Error: {0}'.format(traceback.format_exc()))
                             tileErrorHasOccurred = True
+                            sceneState = "ERROR"
                             continue
       
                         if (curBand == 'toa_band1'):                                    # needed for lineage file generation later
@@ -622,6 +537,7 @@ def processScenes(segment):
                             logger.error('Error: warpCmd - 3 contributing scenes')
                             logger.error('        Error: {0}'.format(traceback.format_exc()))
                             tileErrorHasOccurred = True
+                            sceneState = "ERROR"
                             continue
       
                         if (curBand == 'toa_band1'):                                    # needed for lineage file generation later
@@ -671,6 +587,7 @@ def processScenes(segment):
                     if (newARDname == 'ERROR'):
                         logger.error('Error in filenameCrosswalk for: {0}'.format(curBand))
                         tileErrorHasOccurred = True
+                        sceneState = "ERROR"
                         continue
                     mosaicFileName = tile_id + '_' + newARDname + '.tif'
       
@@ -688,6 +605,7 @@ def processScenes(segment):
                             logger.error('Error: warpCmd - 1 contributing scene')
                             logger.error('        Error: {0}'.format(traceback.format_exc()))
                             tileErrorHasOccurred = True
+                            sceneState = "ERROR"
                             continue
       
       
@@ -709,6 +627,7 @@ def processScenes(segment):
                             logger.error('Error: warpCmd - 2 contributing scenes')
                             logger.error('        Error: {0}'.format(traceback.format_exc()))
                             tileErrorHasOccurred = True
+                            sceneState = "ERROR"
                             continue
       
       
@@ -732,6 +651,7 @@ def processScenes(segment):
                             logger.error('Error: warpCmd - 3 contributing scenes')
                             logger.error('        Error: {0}'.format(traceback.format_exc()))
                             tileErrorHasOccurred = True
+                            sceneState = "ERROR"
                             continue
       
                     logger.info('    End processing for: {0}'.format(curBand))
@@ -757,7 +677,7 @@ def processScenes(segment):
                     logger.info('    Start processing for: {0}'.format(curBand))
   
                     clipParams = ' -dstnodata "1" -srcnodata "1" '
-                    tempFileName = targzMission + '_' + collectionLevel + '_' + curTile[0] + curTile[1] + \
+                    tempFileName = targzMission + '_' + collectionLevel + '_' + curTile[0][0] + curTile[0][1] + \
                                              '_' + targzYear + acqMonth + acqDay + '_' + curBand + '_m0.tif'
                     tempFullName = os.path.join(tileDir, tempFileName)
       
@@ -774,6 +694,7 @@ def processScenes(segment):
                             logger.error('Error: warpCmd - 1 contributing scene')
                             logger.error('        Error: {0}'.format(traceback.format_exc()))
                             tileErrorHasOccurred = True
+                            sceneState = "ERROR"
                             continue
       
                     elif (numScenesPerTile == 2):                                                   # 2 contributing scenes
@@ -793,6 +714,7 @@ def processScenes(segment):
                             logger.error('Error: warpCmd - 2 contributing scenes')
                             logger.error('        Error: {0}'.format(traceback.format_exc()))
                             tileErrorHasOccurred = True
+                            sceneState = "ERROR"
                             continue
       
                     else:                                                                                        # 3 contributing scenes
@@ -814,12 +736,13 @@ def processScenes(segment):
                             logger.error('Error: warpCmd - 3 contributing scenes')
                             logger.error('        Error: {0}'.format(traceback.format_exc()))
                             tileErrorHasOccurred = True
+                            sceneState = "ERROR"
                             continue
       
                                                                     # reassign nodata
                     clipParams = ' -dstnodata "0" -srcnodata "None" '
                     clipParams = clipParams + '-co "compress=deflate" -co "zlevel=9" -co "tiled=yes" -co "predictor=2" '
-                    mosaicFileName = targzMission + '_' + collectionLevel + '_' + curTile[0] + curTile[1] + \
+                    mosaicFileName = targzMission + '_' + collectionLevel + '_' + curTile[0][0] + curTile[0][1] + \
                                                '_' + targzYear + acqMonth + acqDay + '_' + curBand + '.tif'
                     mosaicFullName = os.path.join(tileDir, mosaicFileName)
       
@@ -832,6 +755,7 @@ def processScenes(segment):
                         logger.error('Error: warpCmd - nodata')
                         logger.error('        Error: {0}'.format(traceback.format_exc()))
                         tileErrorHasOccurred = True
+                        sceneState = "ERROR"
                         continue
 
                     logger.info('    End processing for: {0}'.format(curBand))
@@ -861,6 +785,7 @@ def processScenes(segment):
                     if (newARDname == 'ERROR'):
                         logger.error('Error in filenameCrosswalk for: {0}'.format(curBand))
                         tileErrorHasOccurred = True
+                        sceneState = "ERROR"
                         continue
                     baseName = tile_id + '_' + newARDname
       
@@ -882,6 +807,7 @@ def processScenes(segment):
                             logger.error('Error: warpCmd - 1 contributing scene')
                             logger.error('        Error: {0}'.format(traceback.format_exc()))
                             tileErrorHasOccurred = True
+                            sceneState = "ERROR"
                             continue
       
                     elif (numScenesPerTile == 2):                                                       # 2 contributing scenes
@@ -905,6 +831,7 @@ def processScenes(segment):
                             logger.error('Error: warpCmd - 2 contributing scenes - north')
                             logger.error('        Error: {0}'.format(traceback.format_exc()))
                             tileErrorHasOccurred = True
+                            sceneState = "ERROR"
                             continue
       
                                                                     # South - Clip 2nd only
@@ -919,6 +846,7 @@ def processScenes(segment):
                             logger.error('Error: warpCmd - 2 contributing scenes - south')
                             logger.error('        Error: {0}'.format(traceback.format_exc()))
                             tileErrorHasOccurred = True
+                            sceneState = "ERROR"
                             continue
       
                                                                     # mosaic
@@ -934,6 +862,7 @@ def processScenes(segment):
                             logger.error('Error: warpCmd - 2 contributing scenes - mosaic')
                             logger.error('        Error: {0}'.format(traceback.format_exc()))
                             tileErrorHasOccurred = True
+                            sceneState = "ERROR"
                             continue
       
                     else:                                                                                             # 3 contributing scenes
@@ -959,6 +888,7 @@ def processScenes(segment):
                             logger.error('Error: warpCmd - 3 contributing scenes - north')
                             logger.error('        Error: {0}'.format(traceback.format_exc()))
                             tileErrorHasOccurred = True
+                            sceneState = "ERROR"
                             continue
       
                                                                     # Middle - Clip 2nd only
@@ -973,6 +903,7 @@ def processScenes(segment):
                             logger.error('Error: warpCmd - 2 contributing scenes - middle')
                             logger.error('        Error: {0}'.format(traceback.format_exc()))
                             tileErrorHasOccurred = True
+                            sceneState = "ERROR"
                             continue
       
                                                                     # South - Clip 3rd only
@@ -987,6 +918,7 @@ def processScenes(segment):
                             logger.error('Error: warpCmd - 2 contributing scenes - south')
                             logger.error('        Error: {0}'.format(traceback.format_exc()))
                             tileErrorHasOccurred = True
+                            sceneState = "ERROR"
                             continue
       
                                                                     # mosaic
@@ -1003,6 +935,7 @@ def processScenes(segment):
                             logger.error('Error: warpCmd - 2 contributing scenes - mosaic')
                             logger.error('        Error: {0}'.format(traceback.format_exc()))
                             tileErrorHasOccurred = True
+                            sceneState = "ERROR"
                             continue
       
                     if (curBand == 'pixel_qa'):
@@ -1041,7 +974,7 @@ def processScenes(segment):
                                                                         
                 if (numScenesPerTile == 1):                                   # 1 contributing scene
 
-                    calcExpression = ' --calc="' + str(stackA_Value) + ' * (A > -1)"'
+                    calcExpression = ' --calc="' + str(stackA_Value) + ' * (A > -101)"'
                     lineageTempFullName = lineageFullName.replace('.tif', '_linTemp.tif')
 
                     lineageCmd = pythonLoc + ' ' + gdalcalcLoc + ' -A ' + lineage01Name + ' --outfile ' + \
@@ -1054,6 +987,7 @@ def processScenes(segment):
                         logger.error('Error: calcCmd - 1 contributing scene')
                         logger.error('        Error: {0}'.format(traceback.format_exc()))
                         tileErrorHasOccurred = True
+                        sceneState = "ERROR"
                         continue
       
                                                                                             # 1 contributing scene-  compress
@@ -1067,10 +1001,11 @@ def processScenes(segment):
                         logger.error('Error: warpCmd - 1 contributing scene')
                         logger.error('        Error: {0}'.format(traceback.format_exc()))
                         tileErrorHasOccurred = True
+                        sceneState = "ERROR"
                         continue
       
                 elif (numScenesPerTile == 2):                                      # 2 contributing scenes - north
-                    northCalcExp = ' --calc="' + str(stackA_Value) + ' * (A > -1)"'
+                    northCalcExp = ' --calc="' + str(stackA_Value) + ' * (A > -101)"'
                     northTempName = lineageFullName.replace('.tif', '_srcTempN.tif')
                     northLineageCmd = pythonLoc + ' ' + gdalcalcLoc + ' -A ' + lineage01 + \
                                                  ' --outfile ' + northTempName + northCalcExp + \
@@ -1083,10 +1018,11 @@ def processScenes(segment):
                         logger.error('Error: warpCmd - 2 contributing scenes - north')
                         logger.error('        Error: {0}'.format(traceback.format_exc()))
                         tileErrorHasOccurred = True
+                        sceneState = "ERROR"
                         continue
       
                                                                                        # 2 contributing scenes - south
-                    southCalcExp = ' --calc="' + str(stackB_Value) + ' * (A > -1)"'
+                    southCalcExp = ' --calc="' + str(stackB_Value) + ' * (A > -101)"'
                     southTempName = lineageFullName.replace('.tif', '_srcTempS.tif')
                     southLineageCmd = pythonLoc + ' ' + gdalcalcLoc + ' -A ' + lineage02 + \
                                                  ' --outfile ' + southTempName + southCalcExp + \
@@ -1099,6 +1035,7 @@ def processScenes(segment):
                         logger.error('Error: warpCmd - 2 contributing scenes - south')
                         logger.error('        Error: {0}'.format(traceback.format_exc()))
                         tileErrorHasOccurred = True
+                        sceneState = "ERROR"
                         continue
       
                                                                                         # 2 contributing scenes - mosaic North over South
@@ -1114,10 +1051,11 @@ def processScenes(segment):
                         logger.error('Error: warpCmd - 2 contributing scenes - mosaic')
                         logger.error('        Error: {0}'.format(traceback.format_exc()))
                         tileErrorHasOccurred = True
+                        sceneState = "ERROR"
                         continue
       
                 else:                                                         # 3 contributing scenes - north
-                    northCalcExp = ' --calc="' + str(stackA_Value) + ' * (A > -1)"'
+                    northCalcExp = ' --calc="' + str(stackA_Value) + ' * (A > -101)"'
                     northTempName = lineageFullName.replace('.tif', '_srcTempN.tif')
                     northLineageCmd = pythonLoc + ' ' + gdalcalcLoc + ' -A ' + lineage01 + \
                                                  ' --outfile ' + northTempName + northCalcExp + \
@@ -1130,10 +1068,11 @@ def processScenes(segment):
                         logger.error('Error: warpCmd - 3 contributing scenes - north')
                         logger.error('        Error: {0}'.format(traceback.format_exc()))
                         tileErrorHasOccurred = True
+                        sceneState = "ERROR"
                         continue
 
                                                                     # 3 contributing scenes - middle
-                    midCalcExp = ' --calc="' + str(stackB_Value) + ' * (A > -1)"'
+                    midCalcExp = ' --calc="' + str(stackB_Value) + ' * (A > -101)"'
                     midTempName = lineageFullName.replace('.tif', '_srcTempM.tif')
                     midLineageCmd = pythonLoc + ' ' + gdalcalcLoc + ' -A ' + lineage02 + \
                                                ' --outfile ' + midTempName + midCalcExp + \
@@ -1146,10 +1085,11 @@ def processScenes(segment):
                         logger.error('Error: warpCmd - 3 contributing scenes - middle')
                         logger.error('        Error: {0}'.format(traceback.format_exc()))
                         tileErrorHasOccurred = True
+                        sceneState = "ERROR"
                         continue
 
                                                                     # 3 contributing scenes - south
-                    southCalcExp = ' --calc="' + str(stackC_Value) + ' * (A > -1)"'
+                    southCalcExp = ' --calc="' + str(stackC_Value) + ' * (A > -101)"'
                     southTempName = lineageFullName.replace('.tif', '_srcTempS.tif')
                     southLineageCmd = pythonLoc + ' ' + gdalcalcLoc + ' -A ' + lineage03 + \
                                                   ' --outfile ' + southTempName + southCalcExp + \
@@ -1162,6 +1102,7 @@ def processScenes(segment):
                         logger.error('Error: warpCmd - 3 contributing scenes - south')
                         logger.error('        Error: {0}'.format(traceback.format_exc()))
                         tileErrorHasOccurred = True
+                        sceneState = "ERROR"
                         continue
 
                                                                   #  3 contributing scenes - mosaic North, Middle, South
@@ -1177,6 +1118,7 @@ def processScenes(segment):
                         logger.error('Error: warpCmd - 3 contributing scenes - mosaic')
                         logger.error('        Error: {0}'.format(traceback.format_exc()))
                         tileErrorHasOccurred = True
+                        sceneState = "ERROR"
                         continue
 
                 toaFinishedList.append(lineageFileName)
@@ -1214,6 +1156,7 @@ def processScenes(segment):
                     logger.error('Error: generating histogram from lineage file')
                     logger.error('        Error: {0}'.format(traceback.format_exc()))
                     tileErrorHasOccurred = True
+                    sceneState = "ERROR"
                     continue
 
                 numScenesPerTile = parseSceneHistFile(sceneHistFilename)
@@ -1231,7 +1174,7 @@ def processScenes(segment):
                     row = (tile_id,sceneListStr,complete_tile,processingState)
                     completed_tile_list.append(row)
 
-                    insert_tile_record(connection, completed_tile_list)
+                    insert_tile_record(connection, completed_tile_list, logger)
 
                     # Remove the temporary work directory
                     shutil.rmtree(tileDir)
@@ -1264,6 +1207,7 @@ def processScenes(segment):
                     if (newARDname == 'ERROR'):
                         logger.error('Error in filenameCrosswalk for: {0}'.format(curBand))
                         tileErrorHasOccurred = True
+                        sceneState = "ERROR"
                         continue
                     baseName = tile_id + '_' + newARDname
       
@@ -1291,10 +1235,11 @@ def processScenes(segment):
                             logger.error('Error: warpCmd - 1 contributing scene')
                             logger.error('        Error: {0}'.format(traceback.format_exc()))
                             tileErrorHasOccurred = True
+                            sceneState = "ERROR"
                             continue
       
                                                                     # reassign nodata & compress
-                        clipParams = ' -dstnodata "None" -srcnodata "0" '
+                        clipParams = ' -dstnodata "None" -srcnodata "256" '
                         clipParams = clipParams + '-co "compress=deflate" -co "zlevel=9" -co "tiled=yes" -co "predictor=2" '
                         mosaicFileName = baseName + '.tif'
                         mosaicFullName = os.path.join(tileDir, mosaicFileName)
@@ -1307,6 +1252,7 @@ def processScenes(segment):
                             logger.error('Error: warpCmd - nodata')
                             logger.error('        Error: {0}'.format(traceback.format_exc()))
                             tileErrorHasOccurred = True
+                            sceneState = "ERROR"
                             continue
       
                                                                         # 
@@ -1345,6 +1291,7 @@ def processScenes(segment):
                             logger.error('Error: warpCmd - 2 contributing scenes - north')
                             logger.error('        Error: {0}'.format(traceback.format_exc()))
                             tileErrorHasOccurred = True
+                            sceneState = "ERROR"
                             continue
       
                                                                     # South - Clip 2nd only
@@ -1360,6 +1307,7 @@ def processScenes(segment):
                             logger.error('Error: warpCmd - 2 contributing scenes - south')
                             logger.error('        Error: {0}'.format(traceback.format_exc()))
                             tileErrorHasOccurred = True
+                            sceneState = "ERROR"
                             continue
 
                                                               # Mask the North using the lineage file
@@ -1377,6 +1325,7 @@ def processScenes(segment):
                             logger.error('Error: maskCmd - 2 contributing scenes - north')
                             logger.error('        Error: {0}'.format(traceback.format_exc()))
                             tileErrorHasOccurred = True
+                            sceneState = "ERROR"
                             continue
 
                                                               # Mask the South using the lineage file
@@ -1394,6 +1343,7 @@ def processScenes(segment):
                             logger.error('Error: maskCmd - 2 contributing scenes - south')
                             logger.error('        Error: {0}'.format(traceback.format_exc()))
                             tileErrorHasOccurred = True
+                            sceneState = "ERROR"
                             continue
 
                                                                     # mosaic
@@ -1409,10 +1359,11 @@ def processScenes(segment):
                             logger.error('Error: warpCmd - 2 contributing scenes - mosaic')
                             logger.error('        Error: {0}'.format(traceback.format_exc()))
                             tileErrorHasOccurred = True
+                            sceneState = "ERROR"
                             continue
 
                                                               # reassign nodata & compress
-                        clipParams = ' -dstnodata "None" -srcnodata "0" '
+                        clipParams = ' -dstnodata "None" -srcnodata "256" '
                         clipParams = clipParams + '-co "compress=deflate" -co "zlevel=9" -co "tiled=yes" -co "predictor=2" '
                         mosaicFileName = baseName + '.tif'
                         mosaicFullName = os.path.join(tileDir, mosaicFileName)
@@ -1425,6 +1376,7 @@ def processScenes(segment):
                             logger.error('Error: warpCmd - nodata')
                             logger.error('        Error: {0}'.format(traceback.format_exc()))
                             tileErrorHasOccurred = True
+                            sceneState = "ERROR"
                             continue
 
                                                                         # 
@@ -1465,6 +1417,7 @@ def processScenes(segment):
                             logger.error('Error: warpCmd - 3 contributing scenes - north')
                             logger.error('        Error: {0}'.format(traceback.format_exc()))
                             tileErrorHasOccurred = True
+                            sceneState = "ERROR"
                             continue
       
                                                                     # Mid - Clip 2nd only
@@ -1480,6 +1433,7 @@ def processScenes(segment):
                             logger.error('Error: warpCmd - 3 contributing scenes - middle')
                             logger.error('        Error: {0}'.format(traceback.format_exc()))
                             tileErrorHasOccurred = True
+                            sceneState = "ERROR"
                             continue
       
                                                                     # South - Clip 3rd only
@@ -1495,6 +1449,7 @@ def processScenes(segment):
                             logger.error('Error: warpCmd - 3 contributing scenes - south')
                             logger.error('        Error: {0}'.format(traceback.format_exc()))
                             tileErrorHasOccurred = True
+                            sceneState = "ERROR"
                             continue
       
                                                               # Mask the North using the lineage file
@@ -1512,6 +1467,7 @@ def processScenes(segment):
                             logger.error('Error: maskCmd - 3 contributing scenes - north')
                             logger.error('        Error: {0}'.format(traceback.format_exc()))
                             tileErrorHasOccurred = True
+                            sceneState = "ERROR"
                             continue
       
                                                               # Mask the Middle using the lineage file
@@ -1529,6 +1485,7 @@ def processScenes(segment):
                             logger.error('Error: maskCmd - 3 contributing scenes - middle')
                             logger.error('        Error: {0}'.format(traceback.format_exc()))
                             tileErrorHasOccurred = True
+                            sceneState = "ERROR"
                             continue
       
                                                               # Mask the South using the lineage file
@@ -1546,6 +1503,7 @@ def processScenes(segment):
                             logger.error('Error: maskCmd - 3 contributing scenes - south')
                             logger.error('        Error: {0}'.format(traceback.format_exc()))
                             tileErrorHasOccurred = True
+                            sceneState = "ERROR"
                             continue
       
                                                                     # mosaic
@@ -1561,10 +1519,11 @@ def processScenes(segment):
                             logger.error('Error: warpCmd - 3 contributing scenes - mosaic')
                             logger.error('        Error: {0}'.format(traceback.format_exc()))
                             tileErrorHasOccurred = True
+                            sceneState = "ERROR"
                             continue
       
                                                                     # reassign nodata
-                        clipParams = ' -dstnodata "None" -srcnodata "0" '
+                        clipParams = ' -dstnodata "None" -srcnodata "256" '
                         clipParams = clipParams + '-co "compress=deflate" -co "zlevel=9" -co "tiled=yes" -co "predictor=2" '
                         mosaicFileName = baseName + '.tif'
                         mosaicFullName = os.path.join(tileDir, mosaicFileName)
@@ -1577,6 +1536,7 @@ def processScenes(segment):
                             logger.error('Error: warpCmd - nodata')
                             logger.error('        Error: {0}'.format(traceback.format_exc()))
                             tileErrorHasOccurred = True
+                            sceneState = "ERROR"
                             continue
       
       
@@ -1600,6 +1560,7 @@ def processScenes(segment):
                 if (len(statsTupleBits) == 1):
                     logger.error('        Error {0} pixel counts.'.format(pqaTileStart))
                     tileErrorHasOccurred = True
+                    sceneState = "ERROR"
                     continue
 
       
@@ -1657,7 +1618,7 @@ def processScenes(segment):
                 metaFileName = tile_id + ".xml"
                 metaFullName = os.path.join(tileDir, metaFileName)
 
-                metaResults = buildMetadata2(debug, logger, statsTupleCombo, cutLimits, tile_id, \
+                metaResults = buildMetadata(debug, logger, statsTupleCombo, cutLimits, tile_id, \
                                                   L2Scene01MetaFileName, L1Scene01MetaString, \
                                                   L2Scene02MetaFileName, L1Scene02MetaString, \
                                                   L2Scene03MetaFileName, L1Scene03MetaString, \
@@ -1668,12 +1629,14 @@ def processScenes(segment):
                     logger.error('Error: writing metadata file')
                     logger.error('        Error: {0}'.format(traceback.format_exc()))
                     tileErrorHasOccurred = True
+                    sceneState = "ERROR"
                     continue
 
                 if (not os.path.isfile(metaFullName)):
                     logger.error('Error: metadata file does not exist')
                     logger.error('        Error: {0}'.format(traceback.format_exc()))
                     tileErrorHasOccurred = True
+                    sceneState = "ERROR"
                     continue
 
                                                                         # Copy the metadata file to the output directory
@@ -1685,6 +1648,7 @@ def processScenes(segment):
                     logger.error('Error: copying metadata file to output dir')
                     logger.error('        Error: {0}'.format(traceback.format_exc()))
                     tileErrorHasOccurred = True
+                    sceneState = "ERROR"
                     continue
 
                 toaFinishedList.append(metaFileName)
@@ -1716,6 +1680,7 @@ def processScenes(segment):
                     logger.error('Error: creating toa tarfile')
                     logger.error('        Error: {0}'.format(traceback.format_exc()))
                     tileErrorHasOccurred = True
+                    sceneState = "ERROR"
                     continue
       
                                                                # bt
@@ -1730,6 +1695,7 @@ def processScenes(segment):
                     logger.error('Error: creating bt tarfile')
                     logger.error('        Error: {0}'.format(traceback.format_exc()))
                     tileErrorHasOccurred = True
+                    sceneState = "ERROR"
                     continue
 
                                                                # sr
@@ -1744,6 +1710,7 @@ def processScenes(segment):
                     logger.error('Error: creating sr tarfile')
                     logger.error('        Error: {0}'.format(traceback.format_exc()))
                     tileErrorHasOccurred = True
+                    sceneState = "ERROR"
                     continue
                                                                # qa
                 qaFullName = os.path.join(tgzOutputDir, tile_id + "_QA.tar")
@@ -1757,6 +1724,7 @@ def processScenes(segment):
                     logger.error('Error: creating qa tarfile')
                     logger.error('        Error: {0}'.format(traceback.format_exc()))
                     tileErrorHasOccurred = True
+                    sceneState = "ERROR"
                     continue
 
                 logger.info('    End zipping')
@@ -1793,6 +1761,7 @@ def processScenes(segment):
                     logger.error('Error: browse mergeCmd')
                     logger.error('        Error: {0}'.format(traceback.format_exc()))
                     tileErrorHasOccurred = True
+                    sceneState = "ERROR"
                     continue
 
                                                                 # scale the pixel values
@@ -1808,6 +1777,7 @@ def processScenes(segment):
                     logger.error('Error: browse scaleCmd')
                     logger.error('        Error: {0}'.format(traceback.format_exc()))
                     tileErrorHasOccurred = True
+                    sceneState = "ERROR"
                     continue
 
                                                                 # apply compression
@@ -1823,6 +1793,7 @@ def processScenes(segment):
                     logger.error('Error: browse compressCmd')
                     logger.error('        Error: {0}'.format(traceback.format_exc()))
                     tileErrorHasOccurred = True
+                    sceneState = "ERROR"
                     continue
     
                                                                 # internal pyramids
@@ -1835,6 +1806,7 @@ def processScenes(segment):
                     logger.error('Error: browse internalPyramidsCmd')
                     logger.error('        Error: {0}'.format(traceback.format_exc()))
                     tileErrorHasOccurred = True
+                    sceneState = "ERROR"
                     continue
     
                                                                 # move to final location
@@ -1849,6 +1821,7 @@ def processScenes(segment):
                     logger.error('Error: Moving file: {0} ...'.format(brw3FullName))
                     logger.error('        Error: {0}'.format(traceback.format_exc()))
                     tileErrorHasOccurred = True
+                    sceneState = "ERROR"
                     continue
 
                 logger.info('    End building browse.')
@@ -1900,6 +1873,7 @@ def processScenes(segment):
                     logger.error('Error: writing toa md5 file')
                     logger.error('        Error: {0}'.format(traceback.format_exc()))
                     tileErrorHasOccurred = True
+                    sceneState = "ERROR"
                     continue
 
                 try:
@@ -1910,6 +1884,7 @@ def processScenes(segment):
                     logger.error('Error: writing bt md5 file')
                     logger.error('        Error: {0}'.format(traceback.format_exc()))
                     tileErrorHasOccurred = True
+                    sceneState = "ERROR"
                     continue
    
                 try:
@@ -1920,6 +1895,7 @@ def processScenes(segment):
                     logger.error('Error: writing sr md5 file')
                     logger.error('        Error: {0}'.format(traceback.format_exc()))
                     tileErrorHasOccurred = True
+                    sceneState = "ERROR"
                     continue
 
                 try:
@@ -1930,6 +1906,7 @@ def processScenes(segment):
                     logger.error('Error: writing qa md5 file')
                     logger.error('        Error: {0}'.format(traceback.format_exc()))
                     tileErrorHasOccurred = True
+                    sceneState = "ERROR"
                     continue
 
 # ------------------------------------------------------------------------------------------------------------------ #
@@ -1946,17 +1923,17 @@ def processScenes(segment):
                 row = (tile_id,sceneListStr,complete_tile,processingState)
                 completed_tile_list.append(row)
 
-                insert_tile_record(connection, completed_tile_list)
+                insert_tile_record(connection, completed_tile_list, logger)
 
 
 
-        # update PROCESSING_STATE in ARD_PROCESSED_SCENES to 'COMPLETE'
-        updatesql = "update ARD_PROCESSED_SCENES set PROCESSING_STATE = 'COMPLETE' where scene_id = '" + scene_record[4] + "'"
+        # update PROCESSING_STATE in ARD_PROCESSED_SCENES
+        updatesql = "update ARD_PROCESSED_SCENES set PROCESSING_STATE = '" + sceneState + "' where scene_id = '" + scene_record[4] + "'"
         update_cursor = connection.cursor()
         update_cursor.execute(updatesql)
         connection.commit()
         update_cursor.close()
-        logger.info("Scene {0} is COMPLETE.".format(scene_record[4]))
+        logger.info("Scene {0} is {1}.".format(scene_record[4], sceneState))
 
 
         # increment segment scene counter
@@ -1969,18 +1946,6 @@ def processScenes(segment):
         unneededScene = scene_record[4]
         if (os.path.isdir(unneededScene)):
            shutil.rmtree(unneededScene)
-
-def insert_tile_record(connection, completed_tile_list):
-
-   logger.info('Insert tile into ARD_COMPLETED_TILES table: {0}'.format(completed_tile_list))
-   insert_cursor = connection.cursor()
-   processed_tiles_insert = "insert /*+ ignore_row_on_dupkey_index(ARD_COMPLETED_TILES, TILE_ID_PK) */ into ARD_COMPLETED_TILES (tile_id,CONTRIBUTING_SCENES,COMPLETE_TILE,PROCESSING_STATE) values (:1,:2,:3,:4)"
-   insert_cursor.bindarraysize = len(completed_tile_list)
-   insert_cursor.prepare(processed_tiles_insert)
-   insert_cursor.executemany(None, completed_tile_list)
-   insert_cursor.close()
-   connection.commit()
-
 
 
 
@@ -1995,11 +1960,17 @@ if __name__ == "__main__":
     logger = setup_logging()
     logger.info("current working directory: {0}".format(os.getcwd()))
 
-    readConfig()
+    config_values = readConfig(logger)
+    connstr = config_values[0]
+    version = config_values[1]
+    soap_envelope = config_values[2]
+    debug = config_values[3]
+
 
     logger.info('******************Start************')
     logger.info('             DB connection: {0}'.format(connstr))
     logger.info("             Version: {0}".format(version))
+    logger.info("             Debug: {0}".format(debug))
 
     try:
         connection = cx_Oracle.connect(connstr)
@@ -2007,10 +1978,10 @@ if __name__ == "__main__":
         logger.error("Error:  Unable to connect to the database.")
         sys.exit(1)
 
-    segment, tgzOutputDir = readCmdLn(sys.argv)
+    segment, tgzOutputDir = readCmdLn(sys.argv, logger)
 
     finalOutputDirectory = finalDirectoryLU[segment[0][4][3:4]]
-    tgzOutputDir = os.path.join(tgzOutputDir, finalOutputDirectory)
+    tgzOutputDir = os.path.join(tgzOutputDir, finalOutputDirectory, 'ARD_Tile')
 
     logger.info('segment: {0}'.format(segment))
     logger.info('output path: {0}'.format(tgzOutputDir))
@@ -2019,7 +1990,7 @@ if __name__ == "__main__":
     metaOutputDir = tgzOutputDir
 
     # Stage files to disk cache for faster access
-    stageFiles(segment,soap_envelope)
+    stageFiles(segment,soap_envelope, logger)
 
     # Create tiles from segment of scenes
     processScenes(segment)
