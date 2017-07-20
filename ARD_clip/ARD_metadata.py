@@ -25,12 +25,13 @@
 #             and stored in the incoming statsTuple.
 #
 # ==========================================================================
-from ARD_HelperFunctions import logIt, appendToLog, reportToStdout, getARDName
+import os
+from ARD_HelperFunctions import getARDName
 from osgeo import osr,ogr
 import xml.etree.ElementTree as ET
 import xml.dom.minidom as minidom
 import traceback
-
+from espa import Metadata
 
 # ----------------------------------------------------------------------------------------------
 #
@@ -39,7 +40,7 @@ import traceback
 #   Build a new tile metadata file by stealing a lot of the information from the 
 #   source L2 metadata files.
 #
-def buildMetadata2(debug, logger, statsTuple, cutLimits, tileID, \
+def buildMetadata(debug, logger, statsTuple, cutLimits, tileID, \
                                 L2Scene01MetaFileName, L1Scene01MetaString, \
                                 L2Scene02MetaFileName, L1Scene02MetaString, \
                                 L2Scene03MetaFileName, L1Scene03MetaString, \
@@ -47,7 +48,7 @@ def buildMetadata2(debug, logger, statsTuple, cutLimits, tileID, \
                                 regionStr, numScenesPerTile, metaFullName):
 
     if (debug):
-        logger.info('Buildmetadata2: Entered')
+        logger.info('Buildmetadata: Entered')
     
     SceneTagsToBeKept = ('data_provider', 'satellite', 'instrument', \
                                        'acquisition_date', 'scene_center_time', \
@@ -145,8 +146,10 @@ def buildMetadata2(debug, logger, statsTuple, cutLimits, tileID, \
 
                                                         #bounding coordinates - modify L2 scene
     if (debug):
-        logger.info('Buildmetadata2: Ready for bounding_coordinates')
-    newBoundingCoordsStr = global_createBoundingCoordinates(debug, logger, cutLimits, regionStr)
+        logger.info('Buildmetadata: Ready for bounding_coordinates')
+    horiz = tileID[8:11]
+    vertical = tileID[11:14]
+    newBoundingCoordsStr =  getGeographicBoundingCoordinates(logger, horiz, vertical, regionStr)
     tempBoundingElement = ET.fromstring(newBoundingCoordsStr)
     
     gm_bounding = ET.SubElement(outTileGlobal, tempBoundingElement.tag, tempBoundingElement.attrib)
@@ -157,8 +160,8 @@ def buildMetadata2(debug, logger, statsTuple, cutLimits, tileID, \
 
                                                         #projection information - modify L2 scene
     if (debug):
-        logger.info('Buildmetadata2: Ready for projection information')
-    newProjInfo = global_createProjInfo(debug, logger, cutLimits, regionStr)
+        logger.info('Buildmetadata: Ready for projection information')
+    newProjInfo = global_createProjInfo(logger, cutLimits, regionStr)
     tempProjElement = ET.fromstring(newProjInfo)
     
     gm_ProjInfo = ET.SubElement(outTileGlobal, tempProjElement.tag, tempProjElement.attrib)
@@ -250,7 +253,7 @@ def buildMetadata2(debug, logger, statsTuple, cutLimits, tileID, \
                     bands_band_grandchild.text = bandChild.text
 
     if (debug):
-        logger.info('Buildmetadata2: finished tile bands')
+        logger.info('Buildmetadata: finished tile bands')
 
                                                         #
                                                         # "Global" and "bands" have now been created for the new tiles.
@@ -354,14 +357,14 @@ def buildMetadata2(debug, logger, statsTuple, cutLimits, tileID, \
         i = i + 1
 
     if (debug):
-        logger.info('Buildmetadata2: Ready to write')
+        logger.info('Buildmetadata: Ready to write')
 
     namespace1Prefix = "xmlns"
     namespace2Prefix = "xmlns:xsi"
     namespace3Prefix = "xsi:schemaLocation"
     
     namespace1URI = "https://landsat.usgs.gov/ard/v1"
-    namespace2URI = "https://www.w3.org/2001/XMLSchema-instance"
+    namespace2URI = "http://www.w3.org/2001/XMLSchema-instance"
     namespace3URI = "https://landsat.usgs.gov/ard/v1 https://landsat.usgs.gov/ard/ard_metadata_v1_0.xsd"
     
     outRoot.attrib[namespace3Prefix] = namespace3URI
@@ -383,7 +386,7 @@ def buildMetadata2(debug, logger, statsTuple, cutLimits, tileID, \
         f.close()
 
     except:
-        logger.error('Error: Buildmetadata2: Error when writing temp file')
+        logger.error('Error: Buildmetadata: Error when writing temp file')
         logger.error('        Error: {0}'.format(traceback.format_exc()))
         return 'metadata ERROR'
 
@@ -412,8 +415,12 @@ def buildMetadata2(debug, logger, statsTuple, cutLimits, tileID, \
         inMetafile.close()
         outMetafile.close()
 
+        # Validate metafile that was just created
+        tile_metadata = Metadata(metaFullName)
+        tile_metadata.validate()
+
     except:
-        logger.error('Error: Buildmetadata2: Error when fixing file')
+        logger.error('Error: Buildmetadata: Error when fixing or validating file')
         logger.error('        Error: {0}'.format(traceback.format_exc()))
         return 'metadata ERROR'
 
@@ -556,93 +563,41 @@ def fixTileBand2(debug, logger, tileID, filenameCrosswalk, \
     return bandTag
     
     
+
+
 # ----------------------------------------------------------------------------------------------
 #
 #   Purpose:  Create a string containing the WGS84 geographic coordinates of the 
-#                      bounding box.
+#                      input tile (horiz, vertical)
 #
-def global_createBoundingCoordinates(debug, logger, cutLimits, region):
+def getGeographicBoundingCoordinates(logger, horiz, vertical, region):
 
-                                                        # Reproject corner coords into WGS84 
-                                                        # geographic for the metadata
-
-    prjStrCU = "+proj=aea +lat_1=29.5 +lat_2=45.5 +lat_0=23 +lon_0=-96 +x_0=0 " + \
-                    "+y_0=0 +datum=WGS84 +units=m +no_defs"
-    prjStrHI = "+proj=aea +lat_1=8 +lat_2=18 +lat_0=3 +lon_0=-157 +x_0=0 " + \
-                    "+y_0=0 +datum=WGS84 +units=m +no_defs"
-    prjStrAK = "+proj=aea +lat_1=55 +lat_2=65 +lat_0=50 +lon_0=-154 +x_0=0 " + \
-                    "+y_0=0 +datum=WGS84 +units=m +no_defs"
-
-    if (region == 'CU'):
-        prjStr = prjStrCU
-    elif (region == 'HI'):
-        prjStr = prjStrHI
+    if 'ARD_AUX_DIR' in os.environ:
+        aux_path = os.getenv('ARD_AUX_DIR')
+        daShapefile = aux_path + "/shapefiles/" + region + "_ARD_tiles_geographic.shp"
+        driver = ogr.GetDriverByName('ESRI Shapefile')
+        dataSource = driver.Open(daShapefile, 0) # 0 means read-only. 1 means writeable.
     else:
-        prjStr = prjStrAK
-    
-    blank1Pos = cutLimits.find(' ')
-    blank2Pos = cutLimits.find(' ', blank1Pos + 1)
-    blank3Pos = cutLimits.find(' ', blank2Pos + 1)
-    cutLeft = cutLimits[0:blank1Pos]
-    cutBottom = cutLimits[blank1Pos+1:blank2Pos]
-    cutRight = cutLimits[blank2Pos+1:blank3Pos]
-    cutTop = cutLimits[blank3Pos+1:len(cutLimits)-1]
+        logger.error('ARD_AUX_DIR environment variable not set')
+        raise KeyError('ARD_AUX_DIR environment variable not set')
 
-    s_srs = osr.SpatialReference()
-    t_srs = osr.SpatialReference()
-    s_srs.ImportFromProj4(prjStr)
-    t_srs.ImportFromEPSG(4326)
-    geom = ogr.Geometry(ogr.wkbPoint)
-    
-    geom.SetPoint_2D(0, float(cutLeft), float(cutTop))
-    geom.AssignSpatialReference(s_srs)
-    geom.TransformTo(t_srs)
-    ulCoordStr =  geom.GetPoint_2D()
-    
-    geom.SetPoint_2D(0, float(cutRight), float(cutTop))
-    geom.AssignSpatialReference(s_srs)
-    geom.TransformTo(t_srs)
-    urCoordStr =  geom.GetPoint_2D()
-    
-    geom.SetPoint_2D(0, float(cutLeft), float(cutBottom))
-    geom.AssignSpatialReference(s_srs)
-    geom.TransformTo(t_srs)
-    llCoordStr = geom.GetPoint_2D()
-    
-    geom.SetPoint_2D(0, float(cutRight), float(cutBottom))
-    geom.AssignSpatialReference(s_srs)
-    geom.TransformTo(t_srs)
-    lrCoordStr = geom.GetPoint_2D()
+    if dataSource is None:
+        logger.info('Could not open {0}'.format(daShapefile))
+    else:
+        layer = dataSource.GetLayer()
+        query = 'H=' + str(int(horiz)) + ' and V=' + str(int(vertical))
+        layer.SetAttributeFilter(query)
+        for feature in layer:
+            latN = feature.GetField("LAT_NORTH")
+            latS = feature.GetField("LAT_SOUTH")
+            lonW = feature.GetField("LON_WEST")
+            lonE = feature.GetField("LON_EAST")
+            newBoundingCoords = '<bounding_coordinates><west>' + str(lonW) + '</west><east>' + \
+                    str(lonE) + '</east><north>' + str(latN) + '</north><south>' + str(latS) + \
+                    '</south></bounding_coordinates>'
+            logger.debug('      > meta: {0}'.format(newBoundingCoords))
 
-    
-    coordMsg = "Newly generated corner coordinates: " + "UL = " + str(ulCoordStr) + \
-                      " UR = " + str(urCoordStr) + " LL = " + str(llCoordStr) + " LR = " + str(lrCoordStr)
-    logger.info('      > meta: {0}'.format(coordMsg))
-    
-    longitudes = []
-    longitudes.append(ulCoordStr[0])
-    longitudes.append(urCoordStr[0])
-    longitudes.append(llCoordStr[0])
-    longitudes.append(lrCoordStr[0])
-    
-    latitudes = []
-    latitudes.append(ulCoordStr[1])
-    latitudes.append(urCoordStr[1])
-    latitudes.append(llCoordStr[1])
-    latitudes.append(lrCoordStr[1])
-    
-    latN = max(latitudes)
-    latS = min(latitudes)
-    lonW = min(longitudes)
-    lonE = max(longitudes)
-    
-    print coordMsg
-    newBoundingCoords = '<bounding_coordinates><west>' + str(lonW) + '</west><east>' + \
-            str(lonE) + '</east><north>' + str(latN) + '</north><south>' + str(latS) + \
-            '</south></bounding_coordinates>'
-    logger.info('      > meta: {0}'.format(newBoundingCoords))
-    
-    return newBoundingCoords
+            return newBoundingCoords
 
 
 # ----------------------------------------------------------------------------------------------
@@ -652,7 +607,7 @@ def global_createBoundingCoordinates(debug, logger, cutLimits, region):
 #                     
 #                      The corner points are from the tile limits
 #
-def global_createProjInfo(debug, logger, cutLimits, region):
+def global_createProjInfo(logger, cutLimits, region):
 
                                                                # cutLimits is a string separated by blanks
     blank1Pos = cutLimits.find(' ')
@@ -661,7 +616,7 @@ def global_createProjInfo(debug, logger, cutLimits, region):
     cutLeft = float(cutLimits[0:blank1Pos])
     cutBottom = float(cutLimits[blank1Pos+1:blank2Pos])
     cutRight = float(cutLimits[blank2Pos+1:blank3Pos])
-    cutTop = float(cutLimits[blank3Pos+1:len(cutLimits)-1])
+    cutTop = float(cutLimits[blank3Pos+1:])
     
     prjStr = ''
     if (region == 'CU'):

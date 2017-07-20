@@ -10,8 +10,11 @@ import datetime
 import os
 import logging
 import sys
-from osgeo import gdal
+from osgeo import gdal, osr, ogr
 import numpy as np
+import ConfigParser
+import ast
+import urllib2
 
 
 # ----------------------------------------------------------------------------------------------
@@ -30,38 +33,6 @@ def getProductionDateTime():
 
     return prodTime
 
-# ----------------------------------------------------------------------------------------------
-#
-#   Purpose:  Either write to logfile, or write to stdout, depending on debug flag
-#
-def logIt(debug, logName, inStr):
-
-    if (debug):
-        appendToLog(logName, inStr)
-    else:
-        reportToStdout(inStr)
-    
-# ----------------------------------------------------------------------------------------------
-#
-#   Purpose:  Prepend any log entry with a date-time stamp
-#
-def appendToLog(logName, inStr):
-
-    currentTime = datetime.datetime.now()
-    content = currentTime.strftime('%Y-%m-%d %H:%M:%S > ' + inStr + '\n')
-    f = open(logName, 'a')
-    f.write(content)
-    f.close()
-
-# ----------------------------------------------------------------------------------------------
-#
-#   Purpose:  Prepend any stdout logging with a date-time stamp
-#
-def reportToStdout(inStr):
-
-    currentTime = datetime.datetime.now()
-    content = currentTime.strftime('ARD_Tiling> %Y-%m-%d %H:%M:%S > ' + inStr + '\n')
-    print content
     
 # ----------------------------------------------------------------------------------------------
 #
@@ -324,4 +295,316 @@ def raster_value_count(raster_in, landsat_8=False):
         return (countFill, countClear, countWater, countSnow, countShadow, 
                 countCloud)
 
+
+
+# -----------------------------------------------------------------------------
+#
+#   Purpose:  This function finds all the tile ids that intersect the input
+#             landsat product id.  It also creates a dictionary of tile ids
+#             that contain all the required path/rows that contribute to that
+#             tile.
+#   Inputs:   db connection, landsatProdID, region, wrsPath
+#   Example input:  db_connector
+#                   'LC08_L2TP_032028_20130802_20170309_01_A1'
+#                   'CU'
+#                   32
+#                   18
+#   Returns:  a list of tiles, a dictionary of tiles containing lists of path/rows.
+#   Example output:
+#     [('002', '002'), ('003', '002'), ('004', '002')]
+#     {'004002063': [('063', '046'), ('063', '047')],
+#      '002002063': [('063', '046'), ('063', '047')],
+#      '003002063': [('063', '046'), ('063', '047')]}
+#
+def getTilesAndScenesLists(connection, landsatProdID, region, wrsPath, wrsRow, logger):
+
+    scene_id_parts = landsatProdID.split("_")
+
+    #Build north and south scene string for db query
+    # We need to get 2 consecutive wrsRows north and 2 consecutive wrsRows south
+    # of input scene to account for possible 3 scene tile.
+    northRow = wrsRow - 1
+    northnorthRow = wrsRow - 2
+    southRow = wrsRow + 1
+    southsouthRow = wrsRow + 2
+    northPathRow = '{0:03d}{1:03d}'.format(wrsPath,northRow)
+    northnorthPathRow = '{0:03d}{1:03d}'.format(wrsPath,northnorthRow)
+    southPathRow = '{0:03d}{1:03d}'.format(wrsPath,southRow)
+    southsouthPathRow = '{0:03d}{1:03d}'.format(wrsPath,southsouthRow)
+    north_scene_id = scene_id_parts[0] + '%' + northPathRow + '_' + scene_id_parts[3]
+    north_north_scene_id = scene_id_parts[0] + '%' + northnorthPathRow + '_' + scene_id_parts[3]
+    south_scene_id = scene_id_parts[0] + '%' + southPathRow + '_' + scene_id_parts[3]
+    south_south_scene_id = scene_id_parts[0] + '%' + southsouthPathRow + '_' + scene_id_parts[3]
+
+    # Get coordinates for input scene and north and south scene.
+    SQL="select LANDSAT_PRODUCT_ID, \
+         'POLYGON ((' ||  CORNER_UL_LON || ' ' || CORNER_UL_LAT || ',' || \
+         CORNER_LL_LON || ' ' || CORNER_LL_LAT || ',' || \
+         CORNER_LR_LON || ' ' || CORNER_LR_LAT || ',' || \
+         CORNER_UR_LON || ' ' || CORNER_UR_LAT || ',' || \
+         CORNER_UL_LON || ' ' || CORNER_UL_LAT || '))' \
+         from SCENE_COORDINATE_MASTER_V where \
+         LANDSAT_PRODUCT_ID = '" + landsatProdID + "' \
+         OR LANDSAT_PRODUCT_ID like '" + north_scene_id + "%' \
+         OR LANDSAT_PRODUCT_ID like '" + north_north_scene_id + "%' \
+         OR LANDSAT_PRODUCT_ID like '" + south_scene_id + "%' \
+         OR LANDSAT_PRODUCT_ID like '" + south_south_scene_id + "%' \
+         order by LANDSAT_PRODUCT_ID desc"
+
+    select_cursor = connection.cursor()
+    select_cursor.execute(SQL)
+    scene_records = select_cursor.fetchall()
+    select_cursor.close()
+    input_scene_coords = ""
+    north_scene_coords = ""
+    north_north_scene_coords = ""
+    south_scene_coords = ""
+    south_south_scene_coords = ""
+    if len(scene_records) > 0:
+        for record in scene_records:
+            if record[0] == landsatProdID:
+                input_scene_coords = record[1]
+            if northPathRow in record[0]:
+                north_scene_coords = record[1]
+            if northnorthPathRow in record[0]:
+                north_north_scene_coords = record[1]
+            if southPathRow in record[0]:
+                south_scene_coords = record[1]
+            if southsouthPathRow in record[0]:
+                south_south_scene_coords = record[1]
+
+    # Create geometry objects for each scenes coordinates
+    if input_scene_coords != "":
+        input_scene_geometry = ogr.CreateGeometryFromWkt(input_scene_coords)
+    if north_scene_coords != "":
+        north_scene_geometry = ogr.CreateGeometryFromWkt(north_scene_coords)
+    if north_north_scene_coords != "":
+        north_north_scene_geometry = ogr.CreateGeometryFromWkt(north_north_scene_coords)
+    if south_scene_coords != "":
+        south_scene_geometry = ogr.CreateGeometryFromWkt(south_scene_coords)
+    if south_south_scene_coords != "":
+        south_south_scene_geometry = ogr.CreateGeometryFromWkt(south_south_scene_coords)
+
+    # Find all the tiles that intersect the input scene
+    # and put into a list
+
+    if 'ARD_AUX_DIR' in os.environ:
+        aux_path = os.getenv('ARD_AUX_DIR')
+        daShapefile = aux_path + "/shapefiles/" + region + "_ARD_tiles_geographic.shp"
+        driver = ogr.GetDriverByName('ESRI Shapefile')
+        dataSource = driver.Open(daShapefile, 0) # 0 means read-only. 1 means writeable.
+    else:
+        logger.error('ARD_AUX_DIR environment variable not set')
+        raise KeyError('ARD_AUX_DIR environment variable not set')
+
+
+    tile_list = []
+    scenesForTilePathLU = {}
+
+    # Check to see if shapefile is found.
+    if dataSource is None:
+        logger.info('Could not open {0}'.format(daShapefile))
+    else:
+        layer = dataSource.GetLayer()
+        spatialRef = layer.GetSpatialRef()
+        input_scene_geometry.AssignSpatialReference(spatialRef)
+        if north_scene_coords != "":
+            north_scene_geometry.AssignSpatialReference(spatialRef)
+        if north_north_scene_coords != "":
+            north_north_scene_geometry.AssignSpatialReference(spatialRef)
+        if south_scene_coords != "":
+            south_scene_geometry.AssignSpatialReference(spatialRef)
+        if south_south_scene_coords != "":
+            south_south_scene_geometry.AssignSpatialReference(spatialRef)
+
+        for feature2 in layer:
+            geom2 = feature2.GetGeometryRef()
+            H_attr = feature2.GetField('H')
+            V_attr = feature2.GetField('V')
+            leftX_attr = feature2.GetField('UL_X')
+            bottomY_attr = feature2.GetField('LL_Y')
+            rightX_attr = feature2.GetField('LR_X')
+            topY_attr = feature2.GetField('UR_Y')
+
+            # select only the intersections
+            if geom2.Intersects(input_scene_geometry): 
+
+                # put intersected tiles into a list
+                H_formatted = '{0:03d}'.format(H_attr)
+                V_formatted = '{0:03d}'.format(V_attr)
+                tile_tuple = H_formatted, V_formatted
+                tile_tuple2 = leftX_attr, bottomY_attr, rightX_attr, topY_attr
+                final_tuple = tile_tuple, tile_tuple2
+                tile_list.append(final_tuple)
+
+                # Add path, row of input scene to dictionary
+                key = "{0:03d}{1:03d}{2:03d}".format(H_attr, V_attr, wrsPath)
+                path_formatted = '{0:03d}'.format(wrsPath)
+                row_formatted = '{0:03d}'.format(wrsRow)
+                tuple = path_formatted, row_formatted
+                my_list = []
+                my_list.append(tuple)
+                scenesForTilePathLU[key] = my_list
+
+                # Now see if tile intersects with north and south scene
+                # and put into a dictionary
+                if north_scene_coords != "":
+                    if geom2.Intersects(north_scene_geometry): 
+
+                        row_formatted = '{0:03d}'.format(northRow)
+                        tuple = path_formatted, row_formatted
+                        tuple_already_exists = False
+                        my_list = scenesForTilePathLU[key]
+                        for tuple1 in my_list:
+                            if tuple1 == tuple:
+                                tuple_already_exists = True
+                        if not tuple_already_exists:
+                            my_list.append(tuple)
+                if north_north_scene_coords != "":
+                    if geom2.Intersects(north_north_scene_geometry): 
+
+                        row_formatted = '{0:03d}'.format(northnorthRow)
+                        tuple = path_formatted, row_formatted
+                        tuple_already_exists = False
+                        my_list = scenesForTilePathLU[key]
+                        for tuple1 in my_list:
+                            if tuple1 == tuple:
+                                tuple_already_exists = True
+                        if not tuple_already_exists:
+                            my_list.append(tuple)
+                if south_scene_coords != "":
+                    if geom2.Intersects(south_scene_geometry): 
+
+                        row_formatted = '{0:03d}'.format(southRow)
+                        tuple = path_formatted, row_formatted
+                        tuple_already_exists = False
+                        my_list = scenesForTilePathLU[key]
+                        for tuple1 in my_list:
+                            if tuple1 == tuple:
+                                tuple_already_exists = True
+                        if not tuple_already_exists:
+                            my_list.append(tuple)
+                if south_south_scene_coords != "":
+                    if geom2.Intersects(south_south_scene_geometry): 
+
+                        row_formatted = '{0:03d}'.format(southsouthRow)
+                        tuple = path_formatted, row_formatted
+                        tuple_already_exists = False
+                        my_list = scenesForTilePathLU[key]
+                        for tuple1 in my_list:
+                            if tuple1 == tuple:
+                                tuple_already_exists = True
+                        if not tuple_already_exists:
+                            my_list.append(tuple)
+        dataSource = None
+
+    logger.info('Tile list: {0}'.format(tile_list))
+    logger.info('scenesForTilePathLU: {0}'.format(scenesForTilePathLU))
+
+    return tile_list, scenesForTilePathLU
+
+
+
+# ----------------------------------------------------------------------------------------------
+#
+#   Purpose:  Command line argument parsing
+#
+def readCmdLn(argv, logger):
+    logger.info('argv count: {0}'.format(len(argv)))
+    logger.info('argv : {0}'.format(argv))
+
+    if len(argv) != 3:
+       logger.info("need one command line argument")
+       logger.info("example:  ARD_Clip.py '[('2013-07-09',40,29,")
+       logger.info("                          '/hsm/lsat1/IT/collection01/etm/A1_L2/2012/33/36/LE07_L1TP_033036_20121220_20160909_01_A1.tar.gz',")
+       logger.info("                          'LE07_L1TP_033036_20121220_20160909_01_A1'),")
+       logger.info("                        ('2013-07-09',40,30,")
+       logger.info("                          '/hsm/lsat1/IT/collection01/etm/A1_L2/2012/37/37/LE07_L1TP_037037_20121216_20160909_01_A1.tar.gz',")
+       logger.info("                          'LE07_L1TP_037037_20121216_20160909_01_A1')]")
+       logger.info("                        /hsm/lsat1/ST/collection01/lta_incoming")
+       exit (0)
+ 
+    try:
+       segment = ast.literal_eval(argv[1])
+       output_path = argv[2]
+       return (segment, output_path)
+    except Exception as e:
+       logger.error('        Error: {0}'.format(e))
+       sys.exit(0)
+
+
+# ----------------------------------------------------------------------------------------------
+#
+#   Purpose:  Reads values from config file
+#
+def readConfig(logger):
+
+    logger.debug("readConfig")
+    Config = ConfigParser.ConfigParser()
+    if len(Config.read("ARD_Clip.conf")) > 0:
+        logger.debug("Found ARD_Clip.conf")
+        section = 'SectionOne'
+        if Config.has_section(section):
+           if Config.has_option(section, 'dbconnect'):
+              connstr = Config.get(section, 'dbconnect')
+           if Config.has_option(section, 'version'):
+              version = Config.get(section, 'version')
+              logger.info("version: {0}".format(version))
+           if Config.has_option(section, 'soap_envelope_template'):
+              soap_envelope = Config.get(section, 'soap_envelope_template')
+           if Config.has_option(section, 'debug'):
+              debug = Config.getboolean(section, 'debug')
+    return connstr, version, soap_envelope, debug
+
+# ----------------------------------------------------------------------------------------------
+#
+#   Purpose:  Request required L2 scene bundles be moved to fastest cache
+#                     available.
+#
+def stageFiles(segment,soap_envelope, logger):
+    try:
+       logger.info('Start staging...')
+       url="https://dds.cr.usgs.gov/HSMServices/HSMServices?wsdl"
+       headers = {'content-type': 'text/xml'}
+
+       files = ''
+       for scene_record in segment:
+           files = files + '<files>' + scene_record[3] + '</files>'
+       soap_envelope = soap_envelope.replace("#################", files)
+
+       logger.debug('SOAP Envelope: {0}'.format(soap_envelope))
+       request_object = urllib2.Request(url, soap_envelope, headers)
+
+       response = urllib2.urlopen(request_object)
+
+       html_string = response.read()
+       logger.info('Stage response: {0}'.format(html_string))
+    except Exception as e:
+       logger.warning('Error staging files: {0}.  Continue anyway.'.format(e))
+
+    else:
+       logger.info('Staging succeeded...')
+
+
+# ----------------------------------------------------------------------------------------------
+#
+#   Purpose:  Insert a tile record into the ARD_COMPLETED_TILES table
+#
+#
+def insert_tile_record(connection, completed_tile_list, logger):
+
+    try:
+        logger.info('Insert tile into ARD_COMPLETED_TILES table: {0}'.format(completed_tile_list))
+        insert_cursor = connection.cursor()
+        processed_tiles_insert = "insert /*+ ignore_row_on_dupkey_index(ARD_COMPLETED_TILES, TILE_ID_PK) */ into ARD_COMPLETED_TILES (tile_id,CONTRIBUTING_SCENES,COMPLETE_TILE,PROCESSING_STATE) values (:1,:2,:3,:4)"
+        insert_cursor.bindarraysize = len(completed_tile_list)
+        insert_cursor.prepare(processed_tiles_insert)
+        insert_cursor.executemany(None, completed_tile_list)
+        connection.commit()
+    except:
+        logger.error("insert_tile_record:  ERROR inserting into ARD_COMPLETED_TILES table")
+        raise
+
+    finally:
+        insert_cursor.close()
 
