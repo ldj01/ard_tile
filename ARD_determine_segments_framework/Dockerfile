@@ -24,7 +24,6 @@ ENV LIBPROCESS_SSL_ENABLED=1 \
 
 
 COPY determine_segments.py /usr/local/bin/
-COPY determine_segments_no_mesos.py /usr/local/bin/
 WORKDIR /home/tilest
 
 #CMD determine_segments.py

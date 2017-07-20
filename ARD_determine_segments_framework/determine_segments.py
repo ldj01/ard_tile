@@ -192,6 +192,11 @@ class Job():
         localtime_volume.container_path = '/etc/localtime'
         localtime_volume.mode = 2  # mesos_pb2.Volume.Mode.RO
 
+        aux_volume = container.volumes.add()
+        aux_volume.host_path = conf.auxdir
+        aux_volume.container_path = conf.auxdir
+        aux_volume.mode = 2  # mesos_pb2.Volume.Mode.RO
+
         # Specify container Docker image
         docker = mesos_pb2.ContainerInfo.DockerInfo()
         docker.image = conf.container_name
@@ -418,6 +423,7 @@ class Config():
         self.confdir = self.readConfItem(section, 'ard_conf_dir', 0)
         self.indir = self.readConfItem(section, 'base_input_dir', 0)
         self.outdir = self.readConfItem(section, 'base_output_dir', 0)
+        self.auxdir = self.readConfItem(section, 'base_aux_dir', 0)
         self.container_name = self.readConfItem(section, 'container', 0)
         self.container_user = self.readConfItem(section, 'internal_user_id', 0)
         self.container_group = self.readConfItem(section, 'internal_group_id', 0)
