@@ -457,6 +457,8 @@ def determineSegments(jobs):
     reformatted_list = []
     if len(scenes_to_process) > 0:
         prev_file_loc = "init"
+        prev_scene = "init"
+        dup_scene_list = []
         for r in scenes_to_process:
 
             # Get complete file name
@@ -468,8 +470,21 @@ def determineSegments(jobs):
 
                     # add record to reformatted_list list
                     reformatted_list.append(new_tuple)
+                else:
+                    dup_scene_row = (r[4], tarFileName[0], 'NOT PROCESSED')
+                    dup_scene_list.append(dup_scene_row)
                 prev_file_loc = tarFileName[0]
+                prev_scene = r[4]
 
+        # insert duplicate scenes into ARD_PROCESSED_SCENES and mark as 'NOT PROCESSED'
+        dup_scenes_insert = "insert /*+ ignore_row_on_dupkey_index(ARD_PROCESSED_SCENES, SCENE_ID_PK) */ into ARD_PROCESSED_SCENES (scene_id,file_location, PROCESSING_STATE) values (:1,:2,:3)"
+        logger.info("Scenes inserted into ARD_PROCESSED_SCENES table: {0}".format(dup_scene_list))
+        insert_cursor = connection.cursor()
+        insert_cursor.bindarraysize = len(dup_scene_list)
+        insert_cursor.prepare(dup_scenes_insert)
+        insert_cursor.executemany(None, dup_scene_list)
+        connection.commit()
+        insert_cursor.close()
 
         # group like satellite, acq_date and paths together in a list
         temp_segments_list = []
