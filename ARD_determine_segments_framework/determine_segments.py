@@ -456,16 +456,19 @@ def determineSegments(jobs):
     # i.e. acq_date, path, row, file location and landsat product id
     reformatted_list = []
     if len(scenes_to_process) > 0:
+        prev_file_loc = "init"
         for r in scenes_to_process:
 
             # Get complete file name
             tarFileName = glob.glob(r[3])
             if len(tarFileName) > 0:
-                # create new tuple with datetime object converted to string
-                new_tuple = r[0].strftime('%Y-%m-%d'), r[1], r[2], tarFileName[0], r[4]
+                if tarFileName[0] != prev_file_loc:
+                    # create new tuple with datetime object converted to string
+                    new_tuple = r[0].strftime('%Y-%m-%d'), r[1], r[2], tarFileName[0], r[4]
 
-                # add record to reformatted_list list
-                reformatted_list.append(new_tuple)
+                    # add record to reformatted_list list
+                    reformatted_list.append(new_tuple)
+                prev_file_loc = tarFileName[0]
 
 
         # group like satellite, acq_date and paths together in a list
