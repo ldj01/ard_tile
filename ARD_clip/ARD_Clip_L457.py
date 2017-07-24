@@ -17,7 +17,7 @@ from ARD_HelperFunctions import getARDName, readCmdLn, readConfig, stageFiles
 from ARD_HelperFunctions import insert_tile_record
 from ARD_HelperFunctions import makeMetadataString, raster_value_count
 from ARD_HelperFunctions import getProductionDateTime, parseSceneHistFile, setup_logging
-from ARD_HelperFunctions import getTilesAndScenesLists
+from ARD_HelperFunctions import getTilesAndScenesLists, make_file_group_writeable
 from ARD_regionLU import pathrow2regionLU
 from ARD_metadata import buildMetadata
 
@@ -1611,6 +1611,7 @@ def processScenes(segment):
                 metaOutputName = os.path.join(metaOutputDir, metaFileName)
                 try:
                     shutil.copyfile(metaFullName, metaOutputName)
+                    make_file_group_writeable(metaOutputName)
                 except:
                     logger.error('Error: copying metadata file to output dir')
                     logger.error('        Error: {0}'.format(traceback.format_exc()))
@@ -1649,6 +1650,8 @@ def processScenes(segment):
                     tileErrorHasOccurred = True
                     sceneState = "ERROR"
                     continue
+
+                make_file_group_writeable(toaFullName)
       
                                                                # bt
                 btFullName = os.path.join(tgzOutputDir, tile_id + "_BT.tar")
@@ -1665,6 +1668,8 @@ def processScenes(segment):
                     sceneState = "ERROR"
                     continue
 
+                make_file_group_writeable(btFullName)
+
                                                                # sr
                 srFullName = os.path.join(tgzOutputDir, tile_id + "_SR.tar")
                 try:
@@ -1679,6 +1684,8 @@ def processScenes(segment):
                     tileErrorHasOccurred = True
                     sceneState = "ERROR"
                     continue
+
+                make_file_group_writeable(srFullName)
                                                                # qa
                 qaFullName = os.path.join(tgzOutputDir, tile_id + "_QA.tar")
                 try:
@@ -1693,6 +1700,8 @@ def processScenes(segment):
                     tileErrorHasOccurred = True
                     sceneState = "ERROR"
                     continue
+
+                make_file_group_writeable(qaFullName)
 
                 logger.info('    End zipping')
 
@@ -1843,6 +1852,8 @@ def processScenes(segment):
                     sceneState = "ERROR"
                     continue
 
+                make_file_group_writeable(toaMD5Name)
+
                 try:
                     outfile = open(btMD5Name, 'w')
                     outfile.write(btHash + ' ' + btFileName)
@@ -1853,6 +1864,8 @@ def processScenes(segment):
                     tileErrorHasOccurred = True
                     sceneState = "ERROR"
                     continue
+
+                make_file_group_writeable(btMD5Name)
    
                 try:
                     outfile = open(srMD5Name, 'w')
@@ -1865,6 +1878,8 @@ def processScenes(segment):
                     sceneState = "ERROR"
                     continue
 
+                make_file_group_writeable(srMD5Name)
+
                 try:
                     outfile = open(qaMD5Name, 'w')
                     outfile.write(qaHash + ' ' + qaFileName)
@@ -1875,6 +1890,8 @@ def processScenes(segment):
                     tileErrorHasOccurred = True
                     sceneState = "ERROR"
                     continue
+
+                make_file_group_writeable(qaMD5Name)
 
 # ------------------------------------------------------------------------------------------------------------------ #
 #

@@ -15,6 +15,7 @@ import numpy as np
 import ConfigParser
 import ast
 import urllib2
+import stat
 
 
 # ----------------------------------------------------------------------------------------------
@@ -608,3 +609,11 @@ def insert_tile_record(connection, completed_tile_list, logger):
     finally:
         insert_cursor.close()
 
+# ----------------------------------------------------------------------------------------------
+#
+#   Purpose:  Make file group wrietable
+#
+#
+def make_file_group_writeable(filename):
+    st = os.stat(filename)
+    os.chmod(filename, st.st_mode | stat.S_IWGRP)
