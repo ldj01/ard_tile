@@ -277,7 +277,7 @@ def raster_value_count(raster_in, landsat_8=False):
     uni, counts = np.unique(band_arr, return_counts=True)
 
     # count bits
-    countFill = counts[0]
+    countFill = sum_counts(uni, counts, 0)
     countClear = sum_counts(uni, counts, 1)
     countWater = sum_counts(uni, counts, 2)
     countShadow = sum_counts(uni, counts, 3)
@@ -317,11 +317,8 @@ def raster_value_count(raster_in, landsat_8=False):
 #      '002002063': [('063', '046'), ('063', '047')],
 #      '003002063': [('063', '046'), ('063', '047')]}
 #
-def getTilesAndScenesLists(connection, landsatProdID, region, wrsPath, wrsRow, logger):
+def getTilesAndScenesLists(connection, landsatProdID, region, wrsPath, wrsRow, logger, acqdate, satellite):
 
-    scene_id_parts = landsatProdID.split("_")
-
-    #Build north and south scene string for db query
     # We need to get 2 consecutive wrsRows north and 2 consecutive wrsRows south
     # of input scene to account for possible 3 scene tile.
     northRow = wrsRow - 1
@@ -332,10 +329,64 @@ def getTilesAndScenesLists(connection, landsatProdID, region, wrsPath, wrsRow, l
     northnorthPathRow = '{0:03d}{1:03d}'.format(wrsPath,northnorthRow)
     southPathRow = '{0:03d}{1:03d}'.format(wrsPath,southRow)
     southsouthPathRow = '{0:03d}{1:03d}'.format(wrsPath,southsouthRow)
-    north_scene_id = scene_id_parts[0] + '%' + northPathRow + '_' + scene_id_parts[3]
-    north_north_scene_id = scene_id_parts[0] + '%' + northnorthPathRow + '_' + scene_id_parts[3]
-    south_scene_id = scene_id_parts[0] + '%' + southPathRow + '_' + scene_id_parts[3]
-    south_south_scene_id = scene_id_parts[0] + '%' + southsouthPathRow + '_' + scene_id_parts[3]
+
+
+    if satellite == 'LC08':
+        minRowLimit = wrsRow - 2
+        maxRowLimit = wrsRow + 2
+
+        ls_prod_id_sql = "select distinct LANDSAT_PRODUCT_ID from \
+                          inventory.LMD_SCENE where \
+                          trunc(DATE_ACQUIRED) = to_date(:1,'YYYY-MM-DD') \
+                          and LANDSAT_PRODUCT_ID is not null \
+                          and WRS_ROW >= :2 and WRS_ROW <= :3 \
+                          and WRS_PATH = :4"
+        ls_prod_id_tuple = (acqdate,minRowLimit,maxRowLimit,wrsPath)
+        ls_prod_id_cursor = connection.cursor()
+        ls_prod_id_cursor.execute(ls_prod_id_sql, ls_prod_id_tuple)
+        ls_prod_id_scenes = ls_prod_id_cursor.fetchall()
+        ls_prod_id_cursor.close()
+    else:
+        if satellite == 'LE07':
+            table = 'll0arcb.etm_scene_inventory@inv_l2_bridge_link'
+        else:
+            table = 'll0arcb.tm_scene_inventory@inv_l2_bridge_link'
+
+        minRowLimit = wrsRow - 2
+        maxRowLimit = wrsRow + 2
+
+        ls_prod_id_sql = "select distinct LANDSAT_PRODUCT_ID_ALBERS from " + \
+                          table + " where \
+                          trunc(DATE_ACQUIRED) = to_date(:1,'YYYY-MM-DD') \
+                          and LANDSAT_PRODUCT_ID_ALBERS is not null \
+                          and WRS_ROW >= :2 and WRS_ROW <= :3 \
+                          and WRS_PATH = :4"
+        ls_prod_id_tuple = (acqdate,minRowLimit,maxRowLimit,wrsPath)
+        ls_prod_id_cursor = connection.cursor()
+        ls_prod_id_cursor.execute(ls_prod_id_sql, ls_prod_id_tuple)
+        ls_prod_id_scenes = ls_prod_id_cursor.fetchall()
+        ls_prod_id_cursor.close()
+
+
+
+    scene_list = ()
+    loop_ctr = 1
+    where_clause = ''
+    if len(ls_prod_id_scenes) > 0:
+        for record in ls_prod_id_scenes:
+
+            if loop_ctr == 1:
+                where_clause += ' LANDSAT_PRODUCT_ID = :' + str(loop_ctr)
+            else:
+                where_clause += ' OR LANDSAT_PRODUCT_ID = :' + str(loop_ctr)
+
+            if satellite == 'LC08':
+                scene_list = scene_list + (record[0][:6] + '2' + record[0][7:38] + 'A' + record[0][39:],)
+            else:
+                scene_list = scene_list + (record[0][:6] + '2' + record[0][7:],)
+
+            loop_ctr = loop_ctr + 1
+
 
     # Get coordinates for input scene and north and south scene.
     SQL="select LANDSAT_PRODUCT_ID, \
@@ -344,18 +395,16 @@ def getTilesAndScenesLists(connection, landsatProdID, region, wrsPath, wrsRow, l
          CORNER_LR_LON || ' ' || CORNER_LR_LAT || ',' || \
          CORNER_UR_LON || ' ' || CORNER_UR_LAT || ',' || \
          CORNER_UL_LON || ' ' || CORNER_UL_LAT || '))' \
-         from SCENE_COORDINATE_MASTER_V where \
-         LANDSAT_PRODUCT_ID = '" + landsatProdID + "' \
-         OR LANDSAT_PRODUCT_ID like '" + north_scene_id + "%' \
-         OR LANDSAT_PRODUCT_ID like '" + north_north_scene_id + "%' \
-         OR LANDSAT_PRODUCT_ID like '" + south_scene_id + "%' \
-         OR LANDSAT_PRODUCT_ID like '" + south_south_scene_id + "%' \
-         order by LANDSAT_PRODUCT_ID desc"
+         from SCENE_COORDINATE_MASTER_V where " + where_clause + \
+         " order by LANDSAT_PRODUCT_ID desc"
 
     select_cursor = connection.cursor()
-    select_cursor.execute(SQL)
+    select_cursor.execute(SQL, scene_list)
     scene_records = select_cursor.fetchall()
     select_cursor.close()
+
+    logger.info('Coordinate query response: {0}'.format(scene_records))
+
     input_scene_coords = ""
     north_scene_coords = ""
     north_north_scene_coords = ""
@@ -617,3 +666,26 @@ def insert_tile_record(connection, completed_tile_list, logger):
 def make_file_group_writeable(filename):
     st = os.stat(filename)
     os.chmod(filename, st.st_mode | stat.S_IWGRP)
+
+# ----------------------------------------------------------------------------------------------
+#
+#   Purpose:  Update the state of a scene record in the ARD_PROCESSED_SCENES
+#             table
+#
+#
+def update_scene_record(connection, scene_id, state, logger):
+
+    try:
+        logger.info('Update state in ARD_PROCESSED_SCENES table')
+        logger.info('Scene ID: {0} State: {1}'.format(scene_id, state))
+        update_cursor = connection.cursor()
+        ard_processed_scenes_update = "update ARD_PROCESSED_SCENES set PROCESSING_STATE = :1, DATE_PROCESSED = sysdate where scene_id = :2"
+        update_cursor.execute(ard_processed_scenes_update, (state, scene_id))
+        connection.commit()
+    except:
+        logger.error("update_scene_record:  ERROR updating ARD_PROCESSED_SCENES table")
+        raise
+
+    finally:
+        update_cursor.close()
+

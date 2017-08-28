@@ -14,7 +14,7 @@ import logging
 
 
 from ARD_HelperFunctions import getARDName, readCmdLn, readConfig, stageFiles
-from ARD_HelperFunctions import insert_tile_record
+from ARD_HelperFunctions import insert_tile_record, update_scene_record
 from ARD_HelperFunctions import makeMetadataString, raster_value_count
 from ARD_HelperFunctions import getProductionDateTime, parseSceneHistFile, setup_logging
 from ARD_HelperFunctions import getTilesAndScenesLists, make_file_group_writeable
@@ -88,20 +88,13 @@ def processScenes(segment):
 
                              # Session log, if we are in debug mode
                                    
-    currentTime = datetime.datetime.now()
-
-    process_date = currentTime.strftime('%Y%m%d')
     sceneCtr = 0
     for scene_record in segment:
 
         sceneState = "COMPLETE"
 
         # update PROCESSING_STATE in ARD_PROCESSED_SCENES to 'INWORK'
-        updatesql = "update ARD_PROCESSED_SCENES set PROCESSING_STATE = 'INWORK' where scene_id = '" + scene_record[4] + "'"
-        update_cursor = connection.cursor()
-        update_cursor.execute(updatesql)
-        connection.commit()
-        update_cursor.close()
+        update_scene_record(connection, scene_record[4], "INWORK", logger)
         logger.info("Scene {0} is INWORK.".format(scene_record[4]))
 
                              # Current scene to process
@@ -120,17 +113,26 @@ def processScenes(segment):
 
 
         logger.debug("path: {0} row: {1}".format(targzPath,targzRow))
-        region = pathrow2regionLU[targzPath+targzRow]
+
+        if targzPath+targzRow in pathrow2regionLU.keys():
+            region = pathrow2regionLU[targzPath+targzRow]
+        else:
+            sceneState = "NOGRID"
+            update_scene_record(connection, scene_record[4], sceneState, logger)
+            continue
+
         logger.debug("region: {0}".format(region))
 
         # Intersect scene with tile index to determine which tiles must be produced
         # Get tiles for scene and for each tile a list of path/rows
-        # Pass in db connection, landsatProductId, region, WRSPath, WRSRow
+        # Pass in db connection, landsatProductId, region, WRSPath, WRSRow,
+        # acq_date, satellite
         tileAndSceneInfo = getTilesAndScenesLists(connection,
                                                   scene_record[4],
                                                   region, scene_record[1],
                                                   scene_record[2],
-                                                  logger)
+                                                  logger, scene_record[0],
+                                                  targzMission)
 
         reqdTilesHV = tileAndSceneInfo[0]
         scenesForTilePathLU = tileAndSceneInfo[1]
@@ -143,6 +145,10 @@ def processScenes(segment):
 
             productionDateTime = getProductionDateTime()
             tileErrorHasOccurred = False 
+
+            currentTime = datetime.datetime.utcnow()
+
+            process_date = currentTime.strftime('%Y%m%d')
 
             cutLimits = ' '.join(map(str,curTile[1]))
 
@@ -1944,11 +1950,8 @@ def processScenes(segment):
 
 
         # update PROCESSING_STATE in ARD_PROCESSED_SCENES
-        updatesql = "update ARD_PROCESSED_SCENES set PROCESSING_STATE = '" + sceneState + "' where scene_id = '" + scene_record[4] + "'"
-        update_cursor = connection.cursor()
-        update_cursor.execute(updatesql)
-        connection.commit()
-        update_cursor.close()
+        update_scene_record(connection, scene_record[4], sceneState, logger)
+
         logger.info("Scene {0} is {1}.".format(scene_record[4], sceneState))
 
 
