@@ -28,7 +28,7 @@ import cx_Oracle
 
 
 # Specify the software version
-SYSTEM_VERSION = 'ARDTILE_1.0.0'
+SYSTEM_VERSION = 'ARDTILE_1.2.3'
 
 # Specify the ARD tables where we will get info from
 DB_ARD_SCENES = 'ARD_PROCESSED_SCENES'
@@ -637,6 +637,12 @@ def get_command_line_arguments():
                        default=False,
                        help='display scene error information')
 
+    sub_p.add_argument('--nogrid',
+                       action='store_true',
+                       dest='nogrid',
+                       default=False,
+                       help='display scene nogrid information')
+
     sub_p.add_argument('--tsuccess',
                        action='store_true',
                        dest='tsuccess',
@@ -747,6 +753,12 @@ def get_command_line_arguments():
                        default=False,
                        help='display Product IDs in the ERROR state')
 
+    group.add_argument('--nogrid',
+                       action='store_true',
+                       dest='nogrid',
+                       default=False,
+                       help='display Product IDs in the NOGRID state')
+
     # ---------------------------------
     description = 'Displays the Mesos and Marathon leaders'
     sub_p = subparsers.add_parser('leaders',
@@ -787,6 +799,7 @@ TASK_COLORS = {
     'TASK_LOST': '\xb1[1m\x1b[38;5;124mTASK_LOST\x1b[0m',
     'TASK_KILLED': '\xb1[1m\x1b[38;5;124mTASK_KILLED\x1b[0m',
     'TASK_ERROR': '\xb1[1m\x1b[38;5;124mTASK_ERROR\x1b[0m',
+    'TASK_NOGRID': '\xb1[1m\x1b[38;5;124mTASK_NOGRID\x1b[0m',
     'TASK_FAILED': '\xb1[1m\x1b[38;5;124mTASK_FAILED\x1b[0m',
     'TASK_RUNNING': '\x1b[38;5;47mTASK_RUNNING\x1b[0m',
     'TASK_FINISHED': '\x1b[38;5;47mTASK_FINISHED\x1b[0m',
@@ -815,6 +828,7 @@ def status(args, cfg):
                     not args.processing and
                     not args.remaining and
                     not args.error and
+                    not args.nogrid and
                     not args.tsuccess and
                     not args.tasks):
         find_all = True
@@ -826,7 +840,7 @@ def status(args, cfg):
             print('-'*60)
             print(STATUS_DATE_GREEN.format(str(datetime.now())))
             print('-'*60)
-            if find_all or args.success or args.ready or args.reinit or args.processing or args.remaining or args.error:
+            if find_all or args.success or args.ready or args.reinit or args.processing or args.remaining or args.error or args.nogrid:
                 print(HEADING_BLUE.format('Product ID STATUS'))
 
             db_con = cx_Oracle.connect(cfg.ard_db_connect)
@@ -895,6 +909,13 @@ def status(args, cfg):
                         db_cur.execute(select_stmt)
                         value = int(db_cur.fetchone()[0])
                         print(STATUS_FMT.format('ERROR', value))
+
+                    if find_all or args.nogrid:
+                        select_stmt = base_stmt.format(DB_ARD_SCENES, date_range,
+                                                       'NOGRID')
+                        db_cur.execute(select_stmt)
+                        value = int(db_cur.fetchone()[0])
+                        print(STATUS_FMT.format('NOGRID', value))
 
                     if find_all or args.tsuccess:
                         print
@@ -1180,6 +1201,10 @@ def list_ids(args, cfg):
 
             elif args.error:
                 select_stmt = l47_select.format(DB_ARD_SCENES, 'ERROR')
+                db_cur.execute(select_stmt)
+
+            elif args.nogrid:
+                select_stmt = l47_select.format(DB_ARD_SCENES, 'NOGRID')
                 db_cur.execute(select_stmt)
 
             else:
