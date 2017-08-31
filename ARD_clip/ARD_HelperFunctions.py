@@ -16,6 +16,7 @@ import ConfigParser
 import ast
 import urllib2
 import stat
+import cx_Oracle
 
 
 # ----------------------------------------------------------------------------------------------
@@ -689,3 +690,22 @@ def update_scene_record(connection, scene_id, state, logger):
     finally:
         update_cursor.close()
 
+# ----------------------------------------------------------------------------------------------
+#
+#   Purpose:  Connect to the database
+#
+#
+def db_connect(connstr, logger):
+    try:
+        return cx_Oracle.connect(connstr)
+    except:
+        logger.error("Error:  Unable to connect to the database.")
+        sys.exit(1)
+
+# ----------------------------------------------------------------------------------------------
+#
+#   Purpose:  Disconnect from the database
+#
+#
+def db_disconnect(connection):
+    connection.close()

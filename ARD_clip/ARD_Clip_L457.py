@@ -9,7 +9,6 @@ import glob
 import shutil
 import hashlib
 from subprocess import call
-import cx_Oracle
 import logging
 
 
@@ -18,6 +17,7 @@ from ARD_HelperFunctions import insert_tile_record, update_scene_record
 from ARD_HelperFunctions import makeMetadataString, raster_value_count
 from ARD_HelperFunctions import getProductionDateTime, parseSceneHistFile, setup_logging
 from ARD_HelperFunctions import getTilesAndScenesLists, make_file_group_writeable
+from ARD_HelperFunctions import db_connect, db_disconnect
 from ARD_regionLU import pathrow2regionLU
 from ARD_metadata import buildMetadata
 
@@ -91,8 +91,12 @@ def processScenes(segment):
 
         sceneState = "COMPLETE"
 
+        connection = db_connect(connstr, logger)
+
         # update PROCESSING_STATE in ARD_PROCESSED_SCENES to 'INWORK'
         update_scene_record(connection, scene_record[4], "INWORK", logger)
+
+        db_disconnect(connection)
 
         logger.info("Scene {0} is INWORK.".format(scene_record[4]))
 
@@ -117,21 +121,25 @@ def processScenes(segment):
             region = pathrow2regionLU[targzPath+targzRow]
         else:
             sceneState = "NOGRID"
+            connection = db_connect(connstr, logger)
             update_scene_record(connection, scene_record[4], sceneState, logger)
+            db_disconnect(connection)
             continue
 
         logger.debug("region: {0}".format(region))
 
         # Intersect scene with tile index to determine which tiles must be produced
         # Get tiles for scene and for each tile a list of path/rows
-        # Pass in db connection, landsatProductId, region, WRSPath, WRSRow
+        # Pass in db connection, landsatProductId, region, WRSPath, WRSRow,
         # acq_date, satellite
+        connection = db_connect(connstr, logger)
         tileAndSceneInfo = getTilesAndScenesLists(connection,
                                                   scene_record[4],
                                                   region, scene_record[1],
                                                   scene_record[2],
                                                   logger, scene_record[0],
                                                   targzMission)
+        db_disconnect(connection)
 
         reqdTilesHV = tileAndSceneInfo[0]
         scenesForTilePathLU = tileAndSceneInfo[1]
@@ -159,11 +167,13 @@ def processScenes(segment):
 
             SQL="select tile_id, contributing_scenes, complete_tile from ARD_COMPLETED_TILES where tile_id = '" + tile_id + "'"
  
+            connection = db_connect(connstr, logger)
             cursor = connection.cursor()
             cursor.execute(SQL)
             tile_rec = cursor.fetchall()
             logger.info("Tile record: {0}".format(tile_rec))
             cursor.close()
+            db_disconnect(connection)
 
             # db tile record check
             if len(tile_rec) < 1:
@@ -196,10 +206,12 @@ def processScenes(segment):
 
                     if len(contrib_scene_rec) < 1:
                        SQL="select FILE_LOC, LANDSAT_PRODUCT_ID from ARD_L2_ALBERS_INVENTORY_V where LANDSAT_PRODUCT_ID like '%" + contrib_scene_id + "%' order by LANDSAT_PRODUCT_ID desc"
+                       connection = db_connect(connstr, logger)
                        select_cursor = connection.cursor()
                        select_cursor.execute(SQL)
                        temp_rec = select_cursor.fetchall()
                        select_cursor.close()
+                       db_disconnect(connection)
                        logger.info("Contributing scene from db: {0}".format(temp_rec))
                        if len(temp_rec) > 0:
                           fullName = glob.glob(temp_rec[0][0])
@@ -1166,7 +1178,9 @@ def processScenes(segment):
                     row = (tile_id,sceneListStr,complete_tile,processingState)
                     completed_tile_list.append(row)
 
+                    connection = db_connect(connstr, logger)
                     insert_tile_record(connection, completed_tile_list, logger)
+                    db_disconnect(connection)
 
                     # Remove the temporary work directory
                     shutil.rmtree(tileDir)
@@ -1914,12 +1928,16 @@ def processScenes(segment):
                 row = (tile_id,sceneListStr,complete_tile,processingState)
                 completed_tile_list.append(row)
 
+                connection = db_connect(connstr, logger)
                 insert_tile_record(connection, completed_tile_list, logger)
+                db_disconnect(connection)
 
 
 
         # update PROCESSING_STATE in ARD_PROCESSED_SCENES
+        connection = db_connect(connstr, logger)
         update_scene_record(connection, scene_record[4], sceneState, logger)
+        db_disconnect(connection)
 
         logger.info("Scene {0} is {1}.".format(scene_record[4], sceneState))
 
@@ -1959,11 +1977,6 @@ if __name__ == "__main__":
     logger.info("             Version: {0}".format(version))
     logger.info("             Debug: {0}".format(debug))
 
-    try:
-        connection = cx_Oracle.connect(connstr)
-    except:
-        logger.error("Error:  Unable to connect to the database.")
-        sys.exit(1)
 
     segment, tgzOutputDir = readCmdLn(sys.argv, logger)
 
@@ -1982,6 +1995,5 @@ if __name__ == "__main__":
     # Create tiles from segment of scenes
     processScenes(segment)
 
-    connection.close()
     logger.info('\nNormal End')
 
