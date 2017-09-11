@@ -28,7 +28,7 @@ import cx_Oracle
 
 
 # Specify the software version
-SYSTEM_VERSION = 'ARDTILE_1.2.3'
+SYSTEM_VERSION = 'ARDTILE_1.2.4'
 
 # Specify the ARD tables where we will get info from
 DB_ARD_SCENES = 'ARD_PROCESSED_SCENES'
@@ -1055,7 +1055,23 @@ def build_report(args, cfg):
                                            'SUCCESS')
             db_cur.execute(select_stmt)
             value = int(db_cur.fetchone()[0])
-            report += 'SUCCESS:  ' + str(value) + '\n'
+            report += 'SUCCESS:  ' + str(value) + '\n\n'
+
+            base_stmt2 = ("select count(*)"
+                         " from {0}"
+                         " where processing_state = '{1}'")
+            report += 'ARD TILE AND EE TILE COUNTS' + '\n'
+            report += '-----------' + '\n'
+            select_stmt = base_stmt2.format(DB_ARD_TILES, 'SUCCESS')
+            db_cur.execute(select_stmt)
+            value = int(db_cur.fetchone()[0])
+            report += 'ARD TILE TOTAL:  ' + str(value) + '\n'
+
+            base_stmt3 = ("select count(*)"
+                         " from inventory.ard_tile@inv_l2_bridge_link")
+            db_cur.execute(base_stmt3)
+            value = int(db_cur.fetchone()[0])
+            report += 'EE TILE TOTAL:  ' + str(value) + '\n'
         finally:
             db_cur.close()
 
