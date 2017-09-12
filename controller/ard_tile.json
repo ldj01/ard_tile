@@ -1,9 +1,9 @@
 {
-    "cmd": "determine_segments.py",
+    "cmd": "determine_segments.py -c /usr/local/usgs/ard_tile/ARD_determine_segments.conf",
     "container": {
         "docker": {
             "forcePullImage": true,
-            "image": "losrlcmp02.cr.usgs.gov:5000/tdd-ard-segment:0.0.2",
+            "image": "losrlcmp02.cr.usgs.gov:5000/ard-segment:1.2.0",
             "network": "HOST",
             "parameters": [],
             "privileged": false
@@ -27,7 +27,7 @@
             }
         ]
     },
-    "cpus": 0.2,
+    "cpus": 0.3,
     "disk": 0,
     "fetch": [
         {
@@ -55,8 +55,8 @@
     "labels": {
         "MARATHON_SINGLE_INSTANCE_APP": "true"
     },
-    "mem": 256,
-    "taskKillGracePeriodSeconds": 600,
+    "mem": 512,
+    "taskKillGracePeriodSeconds": 150,
     "upgradeStrategy": {
         "maximumOverCapacity": 0,
         "minimumHealthCapacity": 0
