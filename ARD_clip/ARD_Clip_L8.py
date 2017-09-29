@@ -200,21 +200,19 @@ def processScenes(segment):
                        if scene_record2[4].find(contrib_scene_id) > -1:
                           scene_tuple = (scene_record2[3], scene_record2[4])
                           contrib_scene_rec.append(scene_tuple)
-                    logger.debug("Contributing scene from segment: {0}".format(contrib_scene_rec))
+                    logger.info("Contributing scene from segment: {0}".format(contrib_scene_rec))
 
                     #################################################
 
                     ######## Find hsm path for scene in db ######
-
                     if len(contrib_scene_rec) < 1:
-                       SQL="select FILE_LOC, LANDSAT_PRODUCT_ID from ARD_L2_ALBERS_INVENTORY_V where LANDSAT_PRODUCT_ID like '%" + contrib_scene_id + "%' order by LANDSAT_PRODUCT_ID desc"
+                       SQL="select FILE_LOC, LANDSAT_PRODUCT_ID from ARD_L2_ALBERS_INVENTORY_V where LANDSAT_PRODUCT_ID like '" + targzMission + "%" + contrib_scene_id + "%' order by LANDSAT_PRODUCT_ID desc"
                        connection = db_connect(connstr, logger)
                        select_cursor = connection.cursor()
                        select_cursor.execute(SQL)
                        temp_rec = select_cursor.fetchall()
                        select_cursor.close()
                        db_disconnect(connection)
-                       logger.info("Contributing scene from db: {0}".format(temp_rec))
                        if len(temp_rec) > 0:
                           fullName = glob.glob(temp_rec[0][0])
                           if len(fullName) > 0:

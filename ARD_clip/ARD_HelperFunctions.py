@@ -326,10 +326,11 @@ def getTilesAndScenesLists(connection, landsatProdID, region, wrsPath, wrsRow, l
     northnorthRow = wrsRow - 2
     southRow = wrsRow + 1
     southsouthRow = wrsRow + 2
-    northPathRow = '{0:03d}{1:03d}'.format(wrsPath,northRow)
-    northnorthPathRow = '{0:03d}{1:03d}'.format(wrsPath,northnorthRow)
-    southPathRow = '{0:03d}{1:03d}'.format(wrsPath,southRow)
-    southsouthPathRow = '{0:03d}{1:03d}'.format(wrsPath,southsouthRow)
+
+    northPathRow = '_{0:03d}{1:03d}_'.format(wrsPath,northRow)
+    northnorthPathRow = '_{0:03d}{1:03d}_'.format(wrsPath,northnorthRow)
+    southPathRow = '_{0:03d}{1:03d}_'.format(wrsPath,southRow)
+    southsouthPathRow = '_{0:03d}{1:03d}_'.format(wrsPath,southsouthRow)
 
 
     if satellite == 'LC08':
