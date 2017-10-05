@@ -371,6 +371,9 @@ def getTilesAndScenesLists(connection, landsatProdID, region, wrsPath, wrsRow, l
 
 
 
+    tile_list = []
+    scenesForTilePathLU = {}
+
     scene_list = ()
     loop_ctr = 1
     where_clause = ''
@@ -390,172 +393,167 @@ def getTilesAndScenesLists(connection, landsatProdID, region, wrsPath, wrsRow, l
             loop_ctr = loop_ctr + 1
 
 
-    # Get coordinates for input scene and north and south scene.
-    SQL="select LANDSAT_PRODUCT_ID, \
-         'POLYGON ((' ||  CORNER_UL_LON || ' ' || CORNER_UL_LAT || ',' || \
-         CORNER_LL_LON || ' ' || CORNER_LL_LAT || ',' || \
-         CORNER_LR_LON || ' ' || CORNER_LR_LAT || ',' || \
-         CORNER_UR_LON || ' ' || CORNER_UR_LAT || ',' || \
-         CORNER_UL_LON || ' ' || CORNER_UL_LAT || '))' \
-         from SCENE_COORDINATE_MASTER_V where " + where_clause + \
-         " order by LANDSAT_PRODUCT_ID desc"
+        # Get coordinates for input scene and north and south scene.
+        SQL="select LANDSAT_PRODUCT_ID, \
+             'POLYGON ((' ||  CORNER_UL_LON || ' ' || CORNER_UL_LAT || ',' || \
+             CORNER_LL_LON || ' ' || CORNER_LL_LAT || ',' || \
+             CORNER_LR_LON || ' ' || CORNER_LR_LAT || ',' || \
+             CORNER_UR_LON || ' ' || CORNER_UR_LAT || ',' || \
+             CORNER_UL_LON || ' ' || CORNER_UL_LAT || '))' \
+             from SCENE_COORDINATE_MASTER_V where " + where_clause + \
+             " order by LANDSAT_PRODUCT_ID desc"
 
-    select_cursor = connection.cursor()
-    select_cursor.execute(SQL, scene_list)
-    scene_records = select_cursor.fetchall()
-    select_cursor.close()
+        select_cursor = connection.cursor()
+        select_cursor.execute(SQL, scene_list)
+        scene_records = select_cursor.fetchall()
+        select_cursor.close()
 
-    logger.info('Coordinate query response: {0}'.format(scene_records))
+        logger.info('Coordinate query response: {0}'.format(scene_records))
 
-    input_scene_coords = ""
-    north_scene_coords = ""
-    north_north_scene_coords = ""
-    south_scene_coords = ""
-    south_south_scene_coords = ""
-    if len(scene_records) > 0:
-        for record in scene_records:
-            if record[0] == landsatProdID:
-                input_scene_coords = record[1]
-            if northPathRow in record[0]:
-                north_scene_coords = record[1]
-            if northnorthPathRow in record[0]:
-                north_north_scene_coords = record[1]
-            if southPathRow in record[0]:
-                south_scene_coords = record[1]
-            if southsouthPathRow in record[0]:
-                south_south_scene_coords = record[1]
+        input_scene_coords = ""
+        north_scene_coords = ""
+        north_north_scene_coords = ""
+        south_scene_coords = ""
+        south_south_scene_coords = ""
+        if len(scene_records) > 0:
+            for record in scene_records:
+                if record[0] == landsatProdID:
+                    input_scene_coords = record[1]
+                if northPathRow in record[0]:
+                    north_scene_coords = record[1]
+                if northnorthPathRow in record[0]:
+                    north_north_scene_coords = record[1]
+                if southPathRow in record[0]:
+                    south_scene_coords = record[1]
+                if southsouthPathRow in record[0]:
+                    south_south_scene_coords = record[1]
 
-    # Create geometry objects for each scenes coordinates
-    if input_scene_coords != "":
-        input_scene_geometry = ogr.CreateGeometryFromWkt(input_scene_coords)
-    if north_scene_coords != "":
-        north_scene_geometry = ogr.CreateGeometryFromWkt(north_scene_coords)
-    if north_north_scene_coords != "":
-        north_north_scene_geometry = ogr.CreateGeometryFromWkt(north_north_scene_coords)
-    if south_scene_coords != "":
-        south_scene_geometry = ogr.CreateGeometryFromWkt(south_scene_coords)
-    if south_south_scene_coords != "":
-        south_south_scene_geometry = ogr.CreateGeometryFromWkt(south_south_scene_coords)
-
-    # Find all the tiles that intersect the input scene
-    # and put into a list
-
-    if 'ARD_AUX_DIR' in os.environ:
-        aux_path = os.getenv('ARD_AUX_DIR')
-        daShapefile = aux_path + "/shapefiles/" + region + "_ARD_tiles_geographic.shp"
-        driver = ogr.GetDriverByName('ESRI Shapefile')
-        dataSource = driver.Open(daShapefile, 0) # 0 means read-only. 1 means writeable.
-    else:
-        logger.error('ARD_AUX_DIR environment variable not set')
-        raise KeyError('ARD_AUX_DIR environment variable not set')
-
-
-    tile_list = []
-    scenesForTilePathLU = {}
-
-    # Check to see if shapefile is found.
-    if dataSource is None:
-        logger.info('Could not open {0}'.format(daShapefile))
-    else:
-        layer = dataSource.GetLayer()
-        spatialRef = layer.GetSpatialRef()
-        input_scene_geometry.AssignSpatialReference(spatialRef)
+        # Create geometry objects for each scenes coordinates
+        if input_scene_coords != "":
+            input_scene_geometry = ogr.CreateGeometryFromWkt(input_scene_coords)
         if north_scene_coords != "":
-            north_scene_geometry.AssignSpatialReference(spatialRef)
+            north_scene_geometry = ogr.CreateGeometryFromWkt(north_scene_coords)
         if north_north_scene_coords != "":
-            north_north_scene_geometry.AssignSpatialReference(spatialRef)
+            north_north_scene_geometry = ogr.CreateGeometryFromWkt(north_north_scene_coords)
         if south_scene_coords != "":
-            south_scene_geometry.AssignSpatialReference(spatialRef)
+            south_scene_geometry = ogr.CreateGeometryFromWkt(south_scene_coords)
         if south_south_scene_coords != "":
-            south_south_scene_geometry.AssignSpatialReference(spatialRef)
+            south_south_scene_geometry = ogr.CreateGeometryFromWkt(south_south_scene_coords)
 
-        for feature2 in layer:
-            geom2 = feature2.GetGeometryRef()
-            H_attr = feature2.GetField('H')
-            V_attr = feature2.GetField('V')
-            leftX_attr = feature2.GetField('UL_X')
-            bottomY_attr = feature2.GetField('LL_Y')
-            rightX_attr = feature2.GetField('LR_X')
-            topY_attr = feature2.GetField('UR_Y')
+        # Find all the tiles that intersect the input scene
+        # and put into a list
 
-            # select only the intersections
-            if geom2.Intersects(input_scene_geometry): 
+        if 'ARD_AUX_DIR' in os.environ:
+            aux_path = os.getenv('ARD_AUX_DIR')
+            daShapefile = aux_path + "/shapefiles/" + region + "_ARD_tiles_geographic.shp"
+            driver = ogr.GetDriverByName('ESRI Shapefile')
+            dataSource = driver.Open(daShapefile, 0) # 0 means read-only. 1 means writeable.
+        else:
+            logger.error('ARD_AUX_DIR environment variable not set')
+            raise KeyError('ARD_AUX_DIR environment variable not set')
 
-                # put intersected tiles into a list
-                H_formatted = '{0:03d}'.format(H_attr)
-                V_formatted = '{0:03d}'.format(V_attr)
-                tile_tuple = H_formatted, V_formatted
-                tile_tuple2 = leftX_attr, bottomY_attr, rightX_attr, topY_attr
-                final_tuple = tile_tuple, tile_tuple2
-                tile_list.append(final_tuple)
 
-                # Add path, row of input scene to dictionary
-                key = "{0:03d}{1:03d}{2:03d}".format(H_attr, V_attr, wrsPath)
-                path_formatted = '{0:03d}'.format(wrsPath)
-                row_formatted = '{0:03d}'.format(wrsRow)
-                tuple = path_formatted, row_formatted
-                my_list = []
-                my_list.append(tuple)
-                scenesForTilePathLU[key] = my_list
+        # Check to see if shapefile is found.
+        if dataSource is None:
+            logger.info('Could not open {0}'.format(daShapefile))
+        else:
+            layer = dataSource.GetLayer()
+            spatialRef = layer.GetSpatialRef()
+            input_scene_geometry.AssignSpatialReference(spatialRef)
+            if north_scene_coords != "":
+                north_scene_geometry.AssignSpatialReference(spatialRef)
+            if north_north_scene_coords != "":
+                north_north_scene_geometry.AssignSpatialReference(spatialRef)
+            if south_scene_coords != "":
+                south_scene_geometry.AssignSpatialReference(spatialRef)
+            if south_south_scene_coords != "":
+                south_south_scene_geometry.AssignSpatialReference(spatialRef)
 
-                # Now see if tile intersects with north and south scene
-                # and put into a dictionary
-                if north_scene_coords != "":
-                    if geom2.Intersects(north_scene_geometry): 
+            for feature2 in layer:
+                geom2 = feature2.GetGeometryRef()
+                H_attr = feature2.GetField('H')
+                V_attr = feature2.GetField('V')
+                leftX_attr = feature2.GetField('UL_X')
+                bottomY_attr = feature2.GetField('LL_Y')
+                rightX_attr = feature2.GetField('LR_X')
+                topY_attr = feature2.GetField('UR_Y')
 
-                        row_formatted = '{0:03d}'.format(northRow)
-                        tuple = path_formatted, row_formatted
-                        tuple_already_exists = False
-                        my_list = scenesForTilePathLU[key]
-                        for tuple1 in my_list:
-                            if tuple1 == tuple:
-                                tuple_already_exists = True
-                        if not tuple_already_exists:
-                            my_list.append(tuple)
-                if north_north_scene_coords != "":
-                    if geom2.Intersects(north_north_scene_geometry): 
+                # select only the intersections
+                if geom2.Intersects(input_scene_geometry): 
 
-                        row_formatted = '{0:03d}'.format(northnorthRow)
-                        tuple = path_formatted, row_formatted
-                        tuple_already_exists = False
-                        my_list = scenesForTilePathLU[key]
-                        for tuple1 in my_list:
-                            if tuple1 == tuple:
-                                tuple_already_exists = True
-                        if not tuple_already_exists:
-                            my_list.append(tuple)
-                if south_scene_coords != "":
-                    if geom2.Intersects(south_scene_geometry): 
+                    # put intersected tiles into a list
+                    H_formatted = '{0:03d}'.format(H_attr)
+                    V_formatted = '{0:03d}'.format(V_attr)
+                    tile_tuple = H_formatted, V_formatted
+                    tile_tuple2 = leftX_attr, bottomY_attr, rightX_attr, topY_attr
+                    final_tuple = tile_tuple, tile_tuple2
+                    tile_list.append(final_tuple)
 
-                        row_formatted = '{0:03d}'.format(southRow)
-                        tuple = path_formatted, row_formatted
-                        tuple_already_exists = False
-                        my_list = scenesForTilePathLU[key]
-                        for tuple1 in my_list:
-                            if tuple1 == tuple:
-                                tuple_already_exists = True
-                        if not tuple_already_exists:
-                            my_list.append(tuple)
-                if south_south_scene_coords != "":
-                    if geom2.Intersects(south_south_scene_geometry): 
+                    # Add path, row of input scene to dictionary
+                    key = "{0:03d}{1:03d}{2:03d}".format(H_attr, V_attr, wrsPath)
+                    path_formatted = '{0:03d}'.format(wrsPath)
+                    row_formatted = '{0:03d}'.format(wrsRow)
+                    tuple = path_formatted, row_formatted
+                    my_list = []
+                    my_list.append(tuple)
+                    scenesForTilePathLU[key] = my_list
 
-                        row_formatted = '{0:03d}'.format(southsouthRow)
-                        tuple = path_formatted, row_formatted
-                        tuple_already_exists = False
-                        my_list = scenesForTilePathLU[key]
-                        for tuple1 in my_list:
-                            if tuple1 == tuple:
-                                tuple_already_exists = True
-                        if not tuple_already_exists:
-                            my_list.append(tuple)
+                    # Now see if tile intersects with north and south scene
+                    # and put into a dictionary
+                    if north_scene_coords != "":
+                        if geom2.Intersects(north_scene_geometry): 
+
+                            row_formatted = '{0:03d}'.format(northRow)
+                            tuple = path_formatted, row_formatted
+                            tuple_already_exists = False
+                            my_list = scenesForTilePathLU[key]
+                            for tuple1 in my_list:
+                                if tuple1 == tuple:
+                                    tuple_already_exists = True
+                            if not tuple_already_exists:
+                                my_list.append(tuple)
+                    if north_north_scene_coords != "":
+                        if geom2.Intersects(north_north_scene_geometry): 
+
+                            row_formatted = '{0:03d}'.format(northnorthRow)
+                            tuple = path_formatted, row_formatted
+                            tuple_already_exists = False
+                            my_list = scenesForTilePathLU[key]
+                            for tuple1 in my_list:
+                                if tuple1 == tuple:
+                                    tuple_already_exists = True
+                            if not tuple_already_exists:
+                                my_list.append(tuple)
+                    if south_scene_coords != "":
+                        if geom2.Intersects(south_scene_geometry): 
+
+                            row_formatted = '{0:03d}'.format(southRow)
+                            tuple = path_formatted, row_formatted
+                            tuple_already_exists = False
+                            my_list = scenesForTilePathLU[key]
+                            for tuple1 in my_list:
+                                if tuple1 == tuple:
+                                    tuple_already_exists = True
+                            if not tuple_already_exists:
+                                my_list.append(tuple)
+                    if south_south_scene_coords != "":
+                        if geom2.Intersects(south_south_scene_geometry): 
+
+                            row_formatted = '{0:03d}'.format(southsouthRow)
+                            tuple = path_formatted, row_formatted
+                            tuple_already_exists = False
+                            my_list = scenesForTilePathLU[key]
+                            for tuple1 in my_list:
+                                if tuple1 == tuple:
+                                    tuple_already_exists = True
+                            if not tuple_already_exists:
+                                my_list.append(tuple)
         dataSource = None
 
     logger.info('Tile list: {0}'.format(tile_list))
     logger.info('scenesForTilePathLU: {0}'.format(scenesForTilePathLU))
 
     return tile_list, scenesForTilePathLU
-
-
 
 # ----------------------------------------------------------------------------------------------
 #

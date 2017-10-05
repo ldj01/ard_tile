@@ -148,6 +148,16 @@ def processScenes(segment):
 
         logger.info('Number of tiles to create: {0}'.format(len(reqdTilesHV)))
 
+        if len(reqdTilesHV) == 0:
+            logger.info('No scene coordinates found for: {0}'.format(scene_record[4]))
+            sceneState = "ERROR"
+
+            # update PROCESSING_STATE in ARD_PROCESSED_SCENES
+            connection = db_connect(connstr, logger)
+            update_scene_record(connection, scene_record[4], sceneState, logger)
+            db_disconnect(connection)
+            continue
+
                              # Big loop for each tile needed
 
         for curTile in reqdTilesHV:
