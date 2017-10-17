@@ -337,7 +337,7 @@ def getTilesAndScenesLists(connection, landsatProdID, region, wrsPath, wrsRow, l
         minRowLimit = wrsRow - 2
         maxRowLimit = wrsRow + 2
 
-        ls_prod_id_sql = "select distinct LANDSAT_PRODUCT_ID from \
+        ls_prod_id_sql = "select distinct LANDSAT_SCENE_ID from \
                           inventory.LMD_SCENE where \
                           trunc(DATE_ACQUIRED) = to_date(:1,'YYYY-MM-DD') \
                           and LANDSAT_PRODUCT_ID is not null \
@@ -357,10 +357,10 @@ def getTilesAndScenesLists(connection, landsatProdID, region, wrsPath, wrsRow, l
         minRowLimit = wrsRow - 2
         maxRowLimit = wrsRow + 2
 
-        ls_prod_id_sql = "select distinct LANDSAT_PRODUCT_ID_ALBERS from " + \
+        ls_prod_id_sql = "select distinct LANDSAT_SCENE_ID from " + \
                           table + " where \
                           trunc(DATE_ACQUIRED) = to_date(:1,'YYYY-MM-DD') \
-                          and LANDSAT_PRODUCT_ID_ALBERS is not null \
+                          and LANDSAT_PRODUCT_ID is not null \
                           and WRS_ROW >= :2 and WRS_ROW <= :3 \
                           and WRS_PATH = :4"
         ls_prod_id_tuple = (acqdate,minRowLimit,maxRowLimit,wrsPath)
@@ -381,14 +381,11 @@ def getTilesAndScenesLists(connection, landsatProdID, region, wrsPath, wrsRow, l
         for record in ls_prod_id_scenes:
 
             if loop_ctr == 1:
-                where_clause += ' LANDSAT_PRODUCT_ID = :' + str(loop_ctr)
+                where_clause += ' LANDSAT_SCENE_ID = :' + str(loop_ctr)
             else:
-                where_clause += ' OR LANDSAT_PRODUCT_ID = :' + str(loop_ctr)
+                where_clause += ' OR LANDSAT_SCENE_ID = :' + str(loop_ctr)
 
-            if satellite == 'LC08':
-                scene_list = scene_list + (record[0][:6] + '2' + record[0][7:38] + 'A' + record[0][39:],)
-            else:
-                scene_list = scene_list + (record[0][:6] + '2' + record[0][7:],)
+            scene_list = scene_list + (record[0],)
 
             loop_ctr = loop_ctr + 1
 
