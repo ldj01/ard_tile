@@ -1171,9 +1171,11 @@ def processScenes(segment):
                     sceneState = "ERROR"
                     continue
 
-                numScenesPerTile = parseSceneHistFile(sceneHistFilename)
+                contribSceneResults = parseSceneHistFile(sceneHistFilename)
+                contribSceneCount = contribSceneResults[0]
+                contribScenePixCountArray = contribSceneResults[1]
 
-                if (numScenesPerTile == 0):
+                if (contribSceneCount == 0):
                     logger.error('Warning: parsing histogram from lineage file: 0 contributing scenes')
                     logger.error('        Error: {0}'.format(traceback.format_exc()))
                     tileErrorHasOccurred = True
@@ -1193,6 +1195,56 @@ def processScenes(segment):
                     # Remove the temporary work directory
                     shutil.rmtree(tileDir)
                     continue
+
+                # decrement pixel values in lineage file if some scenes didn't contribute
+                # any pixels
+                if (contribSceneCount != numScenesPerTile):
+
+                    decrement_value = numScenesPerTile - contribSceneCount
+                    sceneCountDifference = decrement_value
+
+                    # Determine whether we need decrement the pixel values in the lineage file or not.
+                    calcExpression = ''
+                    if sceneCountDifference == 1:
+                        if contribScenePixCountArray[0] == 0:
+                            calcExpression = ' --calc="A-' + str(decrement_value) + '"'
+                        elif contribScenePixCountArray[1] == 0 and contribScenePixCountArray[2] > 0:
+                            calcExpression = ' --calc="A-(A==3)"'
+                    elif sceneCountDifference == 2:
+                        if contribScenePixCountArray[0] == 0 and contribScenePixCountArray[1] == 0:
+                            calcExpression = ' --calc="A-' + str(decrement_value) + '"'
+                        elif contribScenePixCountArray[0] == 0 and contribScenePixCountArray[2] == 0:
+                            calcExpression = ' --calc="A-' + str(1) + '"'
+
+                    if calcExpression != '':
+                        lineageTempFullName = lineageFullName.replace('.tif', '_linTemp.tif')
+
+                        recalcCmd = pythonLoc + ' ' + gdalcalcLoc + ' -A ' + lineageFullName + ' --outfile ' + lineageTempFullName + calcExpression + ' --type="Byte" --NoDataValue=0 --overwrite'
+
+                        logger.info('        recalc lineage command: {0}'.format(recalcCmd))
+
+                        try:
+                            returnValue = call(recalcCmd, shell=True)
+                        except:
+                            logger.error('Error: recalcCmd - recalculating pixels in Lineage file')
+                            logger.error('        Error: {0}'.format(traceback.format_exc()))
+                            tileErrorHasOccurred = True
+                            sceneState = "ERROR"
+                            continue
+
+                        # compress
+                        clipParams = ' -co "compress=deflate" -co "zlevel=9" -co "tiled=yes" -co "predictor=2" -overwrite '
+                        warpCmd = gdalwarpLoc +  clipParams + lineageTempFullName + ' ' + lineageFullName
+                        if (debug):
+                            logger.info('        compress lineage recalc command: {0}'.format(warpCmd))
+                        try:
+                            returnValue = call(warpCmd, shell=True)
+                        except:
+                            logger.error('Error: warpCmd - compressing lineage recalc')
+                            logger.error('        Error: {0}'.format(traceback.format_exc()))
+                            tileErrorHasOccurred = True
+                            sceneState = "ERROR"
+                            continue
 
                 logger.info('finish updating contributing scenes')
 
@@ -1231,9 +1283,16 @@ def processScenes(segment):
                                                                         # Perform a simple clip and then 
                                                                         # reassign any NoData back to zero
                                                                         #
-                    if (numScenesPerTile == 1): 
-                        inputFileName = stackA_Prefix + '_' + curBand + '.tif'
-                        inputFullName = os.path.join(stackA_Dir, inputFileName)
+                    if (contribSceneCount == 1): 
+                        if contribScenePixCountArray[0] > 0:
+                            inputFileName = stackA_Prefix + '_' + curBand + '.tif'
+                            inputFullName = os.path.join(stackA_Dir, inputFileName)
+                        elif contribScenePixCountArray[1] > 0:
+                            inputFileName = stackB_Prefix + '_' + curBand + '.tif'
+                            inputFullName = os.path.join(stackB_Dir, inputFileName)
+                        elif contribScenePixCountArray[2] > 0:
+                            inputFileName = stackC_Prefix + '_' + curBand + '.tif'
+                            inputFullName = os.path.join(stackC_Dir, inputFileName)
                   
                         clipParams = ' -dstnodata "0" -ot "Byte" -wt "Byte" '
       
@@ -1283,12 +1342,25 @@ def processScenes(segment):
                                                                         # two mask operations.
                                                                         #
 
-                    elif (numScenesPerTile == 2): 
-                        northFilename = stackA_Prefix + '_' + curBand + '.tif'
-                        southFilename = stackB_Prefix + '_' + curBand + '.tif'
+                    elif (contribSceneCount == 2): 
+                        if contribScenePixCountArray[0] > 0 and contribScenePixCountArray[1] > 0:
+                            northFilename = stackA_Prefix + '_' + curBand + '.tif'
+                            southFilename = stackB_Prefix + '_' + curBand + '.tif'
       
-                        northFullname = os.path.join(stackA_Dir, northFilename)
-                        southFullname = os.path.join(stackB_Dir, southFilename)
+                            northFullname = os.path.join(stackA_Dir, northFilename)
+                            southFullname = os.path.join(stackB_Dir, southFilename)
+                        elif contribScenePixCountArray[0] > 0 and contribScenePixCountArray[2] > 0:
+                            northFilename = stackA_Prefix + '_' + curBand + '.tif'
+                            southFilename = stackC_Prefix + '_' + curBand + '.tif'
+      
+                            northFullname = os.path.join(stackA_Dir, northFilename)
+                            southFullname = os.path.join(stackC_Dir, southFilename)
+                        elif contribScenePixCountArray[1] > 0 and contribScenePixCountArray[2] > 0:
+                            northFilename = stackB_Prefix + '_' + curBand + '.tif'
+                            southFilename = stackC_Prefix + '_' + curBand + '.tif'
+      
+                            northFullname = os.path.join(stackB_Dir, northFilename)
+                            southFullname = os.path.join(stackC_Dir, southFilename)
       
                         clipParams = ' -dstnodata "0" -ot "Byte" -wt "Byte" '
       
@@ -1589,9 +1661,10 @@ def processScenes(segment):
                                                         # Create the tile metadata file
                                                         #
       
-                L2Scene01MetaFileName = os.path.join(stackA_Dir, stackA_Prefix + ".xml")
-                L1Scene01MetaFileName = os.path.join(stackA_Dir, stackA_Prefix + "_MTL.txt")
-                L1Scene01MetaString = makeMetadataString(L1Scene01MetaFileName)
+
+                L2Scene01MetaFileName = ''
+                L1Scene01MetaFileName = ''
+                L1Scene01MetaString = ''
     
                 L2Scene02MetaFileName = ''
                 L1Scene02MetaFileName = ''
@@ -1601,15 +1674,35 @@ def processScenes(segment):
                 L1Scene03MetaFileName = ''
                 L1Scene03MetaString = ''
 
-                if (numScenesPerTile == 2) or (numScenesPerTile == 3):
-                    L2Scene02MetaFileName = os.path.join(stackB_Dir, stackB_Prefix + ".xml")
-                    L1Scene02MetaFileName = os.path.join(stackB_Dir, stackB_Prefix + "_MTL.txt")
-                    L1Scene02MetaString = makeMetadataString(L1Scene02MetaFileName)
+                if contribScenePixCountArray[0] > 0:
+                    L2Scene01MetaFileName = os.path.join(stackA_Dir, stackA_Prefix + ".xml")
+                    L1Scene01MetaFileName = os.path.join(stackA_Dir, stackA_Prefix + "_MTL.txt")
+                    L1Scene01MetaString = makeMetadataString(L1Scene01MetaFileName)
 
-                if (numScenesPerTile == 3):
-                    L2Scene03MetaFileName = os.path.join(stackC_Dir, stackC_Prefix + ".xml")
-                    L1Scene03MetaFileName = os.path.join(stackC_Dir, stackC_Prefix + "_MTL.txt")
-                    L1Scene03MetaString = makeMetadataString(L1Scene03MetaFileName)
+                if contribScenePixCountArray[1] > 0:
+                    if L2Scene01MetaFileName == '':
+                        L2Scene01MetaFileName = os.path.join(stackB_Dir, stackB_Prefix + ".xml")
+                        L1Scene01MetaFileName = os.path.join(stackB_Dir, stackB_Prefix + "_MTL.txt")
+                        L1Scene01MetaString = makeMetadataString(L1Scene01MetaFileName)
+                    else:
+
+                        L2Scene02MetaFileName = os.path.join(stackB_Dir, stackB_Prefix + ".xml")
+                        L1Scene02MetaFileName = os.path.join(stackB_Dir, stackB_Prefix + "_MTL.txt")
+                        L1Scene02MetaString = makeMetadataString(L1Scene02MetaFileName)
+
+                if contribScenePixCountArray[2] > 0:
+                    if L2Scene01MetaFileName == '':
+                        L2Scene01MetaFileName = os.path.join(stackC_Dir, stackC_Prefix + ".xml")
+                        L1Scene01MetaFileName = os.path.join(stackC_Dir, stackC_Prefix + "_MTL.txt")
+                        L1Scene01MetaString = makeMetadataString(L1Scene01MetaFileName)
+                    elif L2Scene02MetaFileName == '':
+                        L2Scene02MetaFileName = os.path.join(stackC_Dir, stackC_Prefix + ".xml")
+                        L1Scene02MetaFileName = os.path.join(stackC_Dir, stackC_Prefix + "_MTL.txt")
+                        L1Scene02MetaString = makeMetadataString(L1Scene02MetaFileName)
+                    else:
+                        L2Scene03MetaFileName = os.path.join(stackC_Dir, stackC_Prefix + ".xml")
+                        L1Scene03MetaFileName = os.path.join(stackC_Dir, stackC_Prefix + "_MTL.txt")
+                        L1Scene03MetaString = makeMetadataString(L1Scene03MetaFileName)
 
                 metaFileName = tile_id + ".xml"
                 metaFullName = os.path.join(tileDir, metaFileName)
@@ -1619,7 +1712,7 @@ def processScenes(segment):
                                                   L2Scene02MetaFileName, L1Scene02MetaString, \
                                                   L2Scene03MetaFileName, L1Scene03MetaString, \
                                                   appVersion, productionDateTime, filenameCrosswalk, \
-                                                  region, numScenesPerTile, metaFullName)
+                                                  region, contribSceneCount, metaFullName)
       
                 if 'ERROR' in metaResults:
                     logger.error('Error: writing metadata file')

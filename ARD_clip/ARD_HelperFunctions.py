@@ -191,14 +191,22 @@ def parseSceneHistFile(sceneFilename):
     count2 = long(histArray[2])
     count3 = long(histArray[3])
 
-    if (count3 > 0):
-        return 3
-    elif (count2 > 0):
-        return 2
-    elif (count1 > 0):
-        return 1
+    # save scene pixel counts into an array and return to caller
+    scenePixelCountArray = []
+    scenePixelCountArray.append(count1)
+    scenePixelCountArray.append(count2)
+    scenePixelCountArray.append(count3)
+
+    if (count1 > 0 and count2 > 0 and count3 > 0):
+        return 3, scenePixelCountArray
+    elif ((count1 > 0 and count2 > 0) or
+          (count1 > 0 and count3 > 0) or
+          (count2 > 0 and count3 > 0)):
+        return 2, scenePixelCountArray
+    elif (count1 > 0 or count2 > 0 or count3 > 0):
+        return 1, scenePixelCountArray
     else:
-        return 0
+        return 0, scenePixelCountArray
 
 # ----------------------------------------------------------------------------------------------
 #
