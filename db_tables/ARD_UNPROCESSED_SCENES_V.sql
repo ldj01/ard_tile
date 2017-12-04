@@ -5,7 +5,7 @@ select DATE_ACQUIRED, WRS_PATH,WRS_ROW,file_loc,LANDSAT_PRODUCT_ID,satellite,
             when WRS_PATH||WRS_ROW in ('062046','062047','063045','063046','063047','064045','064046','065045','066045') then 'HI'
             when WRS_PATH||WRS_ROW in ('078023','079023','079024','080021','080023','080024','081020','081023','081024','082023','082024','083018','083024','084018','084024','085016','085024','086024','087024','088023','088024','089023','089024','090023') then 'NOGRID'
             else 'AK'
-       end as REGION from (
+       end as REGION, DATE_L2_GENERATED from (
 SELECT * FROM
   (
   select 
@@ -15,7 +15,8 @@ SELECT * FROM
   substr(LANDSAT_PRODUCT_ID, 14,3) as WRS_ROW,
   L2_LOCATION || '/' || regexp_substr(LANDSAT_PRODUCT_ID, '[^_]+',1) || regexp_substr(LANDSAT_PRODUCT_ID, '[^_]+',1,3) || regexp_substr(LANDSAT_PRODUCT_ID, '[^_]+',1,4) || regexp_substr(LANDSAT_PRODUCT_ID, '[^_]+',1,6) || regexp_substr(LANDSAT_PRODUCT_ID, '[^_]+',1,7) || '-SC*.tar.gz' file_loc,
   LANDSAT_PRODUCT_ID,
-  substr(LANDSAT_PRODUCT_ID,1,4) satellite
+  substr(LANDSAT_PRODUCT_ID,1,4) satellite,
+  DATE_L2_GENERATED
  from l2_albers_inventory
  where L2_ALBERS_INVENTORY_ID in (select max(L2_ALBERS_INVENTORY_ID) from l2_albers_inventory group by LANDSAT_SCENE_ID)
  minus
@@ -28,7 +29,8 @@ SELECT * FROM
   substr(LANDSAT_PRODUCT_ID, 14,3) as WRS_ROW,
  L2_LOCATION || '/' || regexp_substr(LANDSAT_PRODUCT_ID, '[^_]+',1) || regexp_substr(LANDSAT_PRODUCT_ID, '[^_]+',1,3) || regexp_substr(LANDSAT_PRODUCT_ID, '[^_]+',1,4) || regexp_substr(LANDSAT_PRODUCT_ID, '[^_]+',1,6) || regexp_substr(LANDSAT_PRODUCT_ID, '[^_]+',1,7) || '-SC*.tar.gz' file_loc,
  LANDSAT_PRODUCT_ID,
- substr(LANDSAT_PRODUCT_ID,1,4) satellite
+ substr(LANDSAT_PRODUCT_ID,1,4) satellite,
+  DATE_L2_GENERATED
  from l2_albers_inventory
  where L2_ALBERS_INVENTORY_ID in (select max(L2_ALBERS_INVENTORY_ID) from l2_albers_inventory group by LANDSAT_SCENE_ID)
  )
@@ -47,7 +49,8 @@ SELECT * FROM
   substr(LANDSAT_PRODUCT_ID, 14,3) as WRS_ROW,
  L2_LOCATION || '/' || regexp_substr(LANDSAT_PRODUCT_ID, '[^_]+',1) || regexp_substr(LANDSAT_PRODUCT_ID, '[^_]+',1,3) || regexp_substr(LANDSAT_PRODUCT_ID, '[^_]+',1,4) || regexp_substr(LANDSAT_PRODUCT_ID, '[^_]+',1,6) || regexp_substr(LANDSAT_PRODUCT_ID, '[^_]+',1,7) || '-SC*.tar.gz' file_loc,
  LANDSAT_PRODUCT_ID,
- substr(LANDSAT_PRODUCT_ID,1,4) satellite
+ substr(LANDSAT_PRODUCT_ID,1,4) satellite,
+  DATE_L2_GENERATED
  from l2_albers_inventory
  where L2_ALBERS_INVENTORY_ID in (select max(L2_ALBERS_INVENTORY_ID) from l2_albers_inventory group by LANDSAT_SCENE_ID)
  )
