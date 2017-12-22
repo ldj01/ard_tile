@@ -3,7 +3,7 @@
     "container": {
         "docker": {
             "forcePullImage": true,
-            "image": "losrlcmp02.cr.usgs.gov:5000/ard-segment:1.2.7.1",
+            "image": "losrlcmp02.cr.usgs.gov:5000/ard-segment:1.2.7.0",
             "network": "HOST",
             "parameters": [],
             "privileged": false
