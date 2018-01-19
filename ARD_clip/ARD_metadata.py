@@ -247,7 +247,7 @@ def buildMetadata(debug, logger, statsTuple, cutLimits, tileID, \
         for child in tempBandElement:
             bands_band_child = ET.SubElement(bands_band, child.tag, child.attrib)
             bands_band_child.text = child.text
-            if (child.tag == "bitmap_description"):
+            if (child.tag in ["bitmap_description", "class_values"]):
                 for bandChild in child:
                     bands_band_grandchild = ET.SubElement(bands_band_child, bandChild.tag, bandChild.attrib)
                     bands_band_grandchild.text = bandChild.text
@@ -348,7 +348,7 @@ def buildMetadata(debug, logger, statsTuple, cutLimits, tileID, \
                 newTag2 = (child.tag).replace(namespace, '')
                 childElement = ET.SubElement(bandElement, newTag2, child.attrib)
                 childElement.text = child.text
-                if (newTag2 == "bitmap_description"):
+                if (newTag2 in ["bitmap_description", "class_values"]):
                     for bitmapChild in child:
                         bitmapTag = (bitmapChild.tag).replace(namespace, '')
                         bands_band_bitmap = ET.SubElement(childElement, bitmapTag, bitmapChild.attrib)
