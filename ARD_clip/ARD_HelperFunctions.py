@@ -35,10 +35,10 @@ def getProductionDateTime():
 
     return prodTime
 
-    
+
 # ----------------------------------------------------------------------------------------------
 #
-#   Purpose:  Given a tile identifier (Horizontal, Vertical), return the Albers 
+#   Purpose:  Given a tile identifier (Horizontal, Vertical), return the Albers
 #                     coordinates
 #
 def getTileFootprintCoords(curTile, tileFootprints):
@@ -49,7 +49,7 @@ def getTileFootprintCoords(curTile, tileFootprints):
             returnString = str(curTuple[1][0]) + ' ' + str(curTuple[1][1]) + ' ' + \
                            str(curTuple[1][2]) + ' ' + str(curTuple[1][3]) + ' '
     return returnString
-     
+
 # ----------------------------------------------------------------------------------------------
 #
 #   Purpose:  Bands are renamed from Bridge version to ARD version.  This function
@@ -62,7 +62,7 @@ def getARDName(L2filename, filenameCrosswalk):
             return curTuple[1]
 
     return 'ERROR'
-    
+
 # ----------------------------------------------------------------------------------------------
 #
 #   Purpose:  Reads an existing L2 metadata file and returns it as a big, long string
@@ -84,7 +84,7 @@ def makeMetadataString(metaName):
 # ----------------------------------------------------------------------------------------------
 #
 #   Purpose:  A file containing a histogram of values in the pixel_qa band has been
-#                     generated.  Open the file and find the count of the specific values for 
+#                     generated.  Open the file and find the count of the specific values for
 #                     each of the various categories.  These counts will be used for calculating
 #                     the % cloud cover, % snow/ice, etc... that will be shown in EarthExplorer.
 #
@@ -111,14 +111,14 @@ def parseHistFile(histFilename):
         tailLoc = histLines.find(' ', headLoc)
         histArray.append(histLines[headLoc:tailLoc])
         headLoc = tailLoc + 1
-    
+
     countClear = 0
     countWater = 0
     countSnow = 0
     countShadow = 0
     countCloud = 0
     countFill = 0
-    
+
     binNumber = 1
     while (binNumber <= 255):
         if (long(histArray[binNumber]) > 0):
@@ -186,7 +186,7 @@ def parseSceneHistFile(sceneFilename):
         tailLoc = sceneHistLines.find(' ', headLoc)
         histArray.append(sceneHistLines[headLoc:tailLoc])
         headLoc = tailLoc + 1
-    
+
     count1 = long(histArray[1])
     count2 = long(histArray[2])
     count3 = long(histArray[3])
@@ -302,7 +302,7 @@ def raster_value_count(raster_in, landsat_8=False):
                 countCloud, countCirrus, countTerrain)
 
     else:  # else return for L4-7
-        return (countFill, countClear, countWater, countSnow, countShadow, 
+        return (countFill, countClear, countWater, countSnow, countShadow,
                 countCloud)
 
 
@@ -484,7 +484,7 @@ def getTilesAndScenesLists(connection, landsatProdID, region, wrsPath, wrsRow, l
                 topY_attr = feature2.GetField('UR_Y')
 
                 # select only the intersections
-                if geom2.Intersects(input_scene_geometry): 
+                if geom2.Intersects(input_scene_geometry):
 
                     # put intersected tiles into a list
                     H_formatted = '{0:03d}'.format(H_attr)
@@ -506,7 +506,7 @@ def getTilesAndScenesLists(connection, landsatProdID, region, wrsPath, wrsRow, l
                     # Now see if tile intersects with north and south scene
                     # and put into a dictionary
                     if north_scene_coords != "":
-                        if geom2.Intersects(north_scene_geometry): 
+                        if geom2.Intersects(north_scene_geometry):
 
                             row_formatted = '{0:03d}'.format(northRow)
                             tuple = path_formatted, row_formatted
@@ -518,7 +518,7 @@ def getTilesAndScenesLists(connection, landsatProdID, region, wrsPath, wrsRow, l
                             if not tuple_already_exists:
                                 my_list.append(tuple)
                     if north_north_scene_coords != "":
-                        if geom2.Intersects(north_north_scene_geometry): 
+                        if geom2.Intersects(north_north_scene_geometry):
 
                             row_formatted = '{0:03d}'.format(northnorthRow)
                             tuple = path_formatted, row_formatted
@@ -530,7 +530,7 @@ def getTilesAndScenesLists(connection, landsatProdID, region, wrsPath, wrsRow, l
                             if not tuple_already_exists:
                                 my_list.append(tuple)
                     if south_scene_coords != "":
-                        if geom2.Intersects(south_scene_geometry): 
+                        if geom2.Intersects(south_scene_geometry):
 
                             row_formatted = '{0:03d}'.format(southRow)
                             tuple = path_formatted, row_formatted
@@ -542,7 +542,7 @@ def getTilesAndScenesLists(connection, landsatProdID, region, wrsPath, wrsRow, l
                             if not tuple_already_exists:
                                 my_list.append(tuple)
                     if south_south_scene_coords != "":
-                        if geom2.Intersects(south_south_scene_geometry): 
+                        if geom2.Intersects(south_south_scene_geometry):
 
                             row_formatted = '{0:03d}'.format(southsouthRow)
                             tuple = path_formatted, row_formatted
@@ -578,7 +578,7 @@ def readCmdLn(argv, logger):
        logger.info("                          'LE07_L1TP_037037_20121216_20160909_01_A1')]")
        logger.info("                        /hsm/lsat1/ST/collection01/lta_incoming")
        exit (0)
- 
+
     try:
        segment = ast.literal_eval(argv[1])
        output_path = argv[2]
