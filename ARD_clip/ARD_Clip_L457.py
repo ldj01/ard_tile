@@ -25,7 +25,7 @@ from ARD_metadata import buildMetadata
 #
 #   ARD Processing Script
 #
-#   22 Mar 2017   -   0.1   -  test stack, Landsat 4,5,7 only 
+#   22 Mar 2017   -   0.1   -  test stack, Landsat 4,5,7 only
 #
 # ==========================================================================
 #
@@ -85,7 +85,7 @@ def processScenes(segment):
 
 
                              # Session log, if we are in debug mode
-                                   
+
     sceneCtr = 0
     for scene_record in segment:
 
@@ -161,7 +161,7 @@ def processScenes(segment):
         for curTile in reqdTilesHV:
 
             productionDateTime = getProductionDateTime()
-            tileErrorHasOccurred = False 
+            tileErrorHasOccurred = False
 
             currentTime = datetime.datetime.utcnow()
 
@@ -176,7 +176,7 @@ def processScenes(segment):
             # See if tile_id exists in ARD_COMPLETED_TILES table
 
             SQL="select tile_id, contributing_scenes, complete_tile from ARD_COMPLETED_TILES where tile_id = '" + tile_id + "'"
- 
+
             connection = db_connect(connstr, logger)
             cursor = connection.cursor()
             cursor.execute(SQL)
@@ -189,13 +189,13 @@ def processScenes(segment):
             if len(tile_rec) < 1:
                 logger.info("create tile")
 
-                
+
                 # Get scenes that will contribute to the tile.
                 # Unpack each tar file
                 # if necessary.
                 scenesForTilePath = scenesForTilePathLU[curTile[0][0]+curTile[0][1]+targzPath]
                 logger.debug('# Scenes needed for tile: {0}: {1}'.format(tile_id,len(scenesForTilePath)))
-         
+
                 contributingScenes = []
                 contributingScenesforDB = []
                 for pathRow in scenesForTilePath:
@@ -244,26 +244,26 @@ def processScenes(segment):
 
                 logger.info("Contributing scenes: {0}".format(contributingScenes))
 
-   
+
                 logger.info('Tile: {0}  - Number of contributing scenes: {1}'.format(tile_id, len(contributingScenes)))
-   
+
                 # Maximum # of scenes that can contribute to a tile is 3
-   
+
                 if (len(contributingScenes) > 3) or (len(contributingScenes) < 1):
                     logger.info('Skipping tile - Unexpected number of scenes = {0}'.format(len(contributingScenes)))
                     tileErrorHasOccurred = True
                     sceneState = "ERROR"
                     continue
-   
+
                 sceneInfoList = []
                 stackA_metadataName = ''
                 stackB_metadataName = ''
                 stackC_metadataName = ''
-       
-   #     ----------- Start of loop gathering information about each contributing scene for this particular tile                            
-   
+
+   #     ----------- Start of loop gathering information about each contributing scene for this particular tile
+
                                  # If each contributing scene is not already unpacked, do it here
-       
+
                 contribSceneCtr = 0
                 for thisTar in contributingScenes:
 
@@ -275,16 +275,16 @@ def processScenes(segment):
                         unneededScene = segment[unneededSceneIdx][4]
                         if (os.path.isdir(unneededScene)):
                             shutil.rmtree(unneededScene)
-                 
+
                     logger.info('Required Scene: {0}'.format(thisTar))
-   
+
                     sceneDir = contributingScenesforDB[contribSceneCtr]
                     contribSceneCtr = contribSceneCtr + 1
-   
+
                     if (not os.path.isdir(sceneDir)):
                         if (debug):
                             logger.info('Scene directory does not exist.  Will try to create: ' + sceneDir)
-   
+
                         try:
                             os.makedirs(sceneDir)
                         except:
@@ -293,9 +293,9 @@ def processScenes(segment):
                             tileErrorHasOccurred = True
                             sceneState = "ERROR"
                             continue
-   
+
                         logger.info('Created scene directory: {0}'.format(sceneDir))
-   
+
                         try:
                             tar = tarfile.open(thisTar)
                             tar.extractall(sceneDir)
@@ -307,21 +307,21 @@ def processScenes(segment):
                             sceneState = "ERROR"
                             continue
                         logger.info('End unpacking tar')
-   
+
                                 # Get the scene prefix information from the metadata filename in each scene directory
-   
+
                     sceneMetadataName = os.path.join(sceneDir, '*.xml')
                     sceneMetadataList = glob.glob(sceneMetadataName)
                     sceneMetadataPath = sceneMetadataList[0]
-     
+
                                                              #LE07_L1TP_045028_20161016_20161020_01_A1_toa_band1
-   
+
                     tp, scenePrefix = os.path.split(sceneMetadataPath)
                     scenePrefix = scenePrefix.replace(".xml", "")
                     logger.info('scenePrefix = {0}'.format(scenePrefix))
-   
+
                                    # The sceneTuple objects are created for each contributing scene
-        
+
                     scenePathString = targzPath
                     sceneRowString = sceneDir[13:16]
                     scenePathInt = int(scenePathString)
@@ -329,23 +329,23 @@ def processScenes(segment):
                     sceneTuple = (sceneDir, scenePrefix, scenePathInt, sceneRowInt, sceneMetadataName)
                     sceneInfoList.append(sceneTuple)
                     #print sceneTuple
-   
+
    #     -----------  End of loop gathering information about each contributing scene for this particular tile
-   
-   
+
+
                                               # This tile info is the same regardless of which scenes will contribute.
                                               # We will use this tile information for building various filenames
-   
+
                 firstTuple = sceneInfoList[0]
-          
+
                 acqMonth = (firstTuple[1])[21:23]
                 acqDay = (firstTuple[1])[23:25]
                 collectionNumber = (firstTuple[1])[35:37]
                 collectionCategory = (firstTuple[1])[38:40]
                 firstTupleRow = firstTuple[3]
-      
+
                 logger.info('Starting to build tile: {0}'.format(tile_id))
-      
+
                                    # Determine which scene(s) will overlay the other scene(s) for this tile.
                                    # North scenes (lower row #) will always overlay South scenes (higher row #)
                                    #
@@ -353,16 +353,16 @@ def processScenes(segment):
                                    #     stackA  - the northern-most contributing scene
                                    #     stackB  - the next underlying contributing scene
                                    #     stackC  - the bottom contributing scene if there are 3
-      
+
                 if (len(sceneInfoList) == 1):
                     numScenesPerTile = 1
                     stackA_Prefix = sceneInfoList[0][1]
                     stackA_Dir = sceneInfoList[0][0]
-                    stackA_Value = 1                                           
-                    stackA_metadataName = sceneInfoList[0][4]      
+                    stackA_Value = 1
+                    stackA_metadataName = sceneInfoList[0][4]
 
                     logger.info('Only one contributing scene: {0}'.format(stackA_Prefix))
-      
+
                 elif (len(sceneInfoList) == 2):
                     numScenesPerTile = 2
                     secondTuple = sceneInfoList[1]
@@ -385,18 +385,18 @@ def processScenes(segment):
                         stackB_Value = 2
                         stackA_MetadataName = sceneInfoList[1][4]
                         stackB_MetadataName = sceneInfoList[0][4]
-      
+
                     logger.info('2 contributing scenes.')
                     logger.info('Contributing North scene: {0}'.format(stackA_Prefix))
                     logger.info('Contributing South scene: {0}'.format(stackB_Prefix))
-      
+
                 else:
                     numScenesPerTile = 3
                     secondTuple = sceneInfoList[1]
                     thirdTuple = sceneInfoList[2]
                     secondTupleRow = secondTuple[3]
                     thirdTupleRow = thirdTuple[3]
-      
+
                     tileList = [firstTupleRow, secondTupleRow, thirdTupleRow]
                     tileList2 = [firstTupleRow, secondTupleRow, thirdTupleRow]
                     listMin = min(tileList)
@@ -407,7 +407,7 @@ def processScenes(segment):
                     tileList.remove(listMax)
                     listMid = tileList[0]
                     midPos = tileList2.index(listMid)
-      
+
                     stackA_Prefix = sceneInfoList[minPos][1]
                     stackB_Prefix = sceneInfoList[midPos][1]
                     stackC_Prefix = sceneInfoList[maxPos][1]
@@ -420,17 +420,17 @@ def processScenes(segment):
                     stackA_MetadataName = sceneInfoList[minPos][4]
                     stackB_MetadataName = sceneInfoList[midPos][4]
                     stackC_MetadataName = sceneInfoList[maxPos][4]
-             
+
                     logger.info('3 contributing scenes.')
                     logger.info('Northern most: {0}'.format(stackA_Prefix))
                     logger.info('       Middle: {0}'.format(stackB_Prefix))
                     logger.info('Southern most: {0}'.format(stackC_Prefix))
-           
-             
+
+
                                    # Set up the tile output directory
-      
+
                 tileDir = tile_id
-          
+
                 if (not os.path.isdir(tileDir)):
                     try:
                         logger.info('Tile directory does not exist.  Will try to create: {0}'.format(tileDir))
@@ -441,43 +441,43 @@ def processScenes(segment):
                         tileErrorHasOccurred = True
                         sceneState = "ERROR"
                         continue
-      
+
                     logger.info('Created tile directory: {0}'.format(tileDir))
-      
+
                                                                # these lists will hold the final files for each tar file
                 toaFinishedList = []
                 btFinishedList = []
                 srFinishedList = []
                 qaFinishedList = []
                 browseList = []                                  # this list holds the 3 required (RGB) layers
-             
+
                                                                # used for calculating the % snow, % cloud, etc...
                 pixelQATile = ''
                 pixelQATile256 = ''
-       
-                                                                # set lineage names when making toa_band1, 
+
+                                                                # set lineage names when making toa_band1,
                                                                 # but build the actual tif late in the processing
                 lineage01Name = ''
                 lineage02Name = ''
                 lineage03Name = ''
                 lineageFileName = ''
                 lineageFullName = ''
-      
+
 # --------------------------------------------------------------------------------------------------------------------------- #
 #
 #     Band Type 1
 #
 #                   16 bit signed integer
-#     		NoData = -9999 
+#     		NoData = -9999
 #
 #
                 logger.info('band type 1')
                 for curBand in bandType01:
-      
+
                     if (tileErrorHasOccurred):
                         continue
                     logger.info('     Start processing for band: {0}'.format(curBand))
-      
+
                     clipParams = ' -dstnodata "-9999" -srcnodata "-9999" '
                     clipParams = clipParams + '-co "compress=deflate" -co "zlevel=9" -co "tiled=yes" -co "predictor=2" '
                     newARDname = getARDName(curBand, filenameCrosswalk)
@@ -489,7 +489,7 @@ def processScenes(segment):
                     mosaicFileName = tile_id + '_' + newARDname + '.tif'
                     lineageTifName = tile_id + '_LINEAGEQA.tif'
                     lineageFullName = os.path.join(tileDir, lineageTifName)
-      
+
                     if (numScenesPerTile == 1):                                     # 1 contributing scene
                         sceneFullName = os.path.join(stackA_Dir, stackA_Prefix + '_' + curBand + '.tif')
                         mosaicFullName = os.path.join(tileDir, mosaicFileName)
@@ -505,19 +505,19 @@ def processScenes(segment):
                             tileErrorHasOccurred = True
                             sceneState = "ERROR"
                             continue
-                                                                   
+
                         if (curBand == 'toa_band1'):                                 # needed for lineage file generation later
                             lineage01Name = mosaicFullName
-      
-      
+
+
                     elif (numScenesPerTile == 2):                                     # 2 contributing scenes
                         northFilename = stackA_Prefix + '_' + curBand + '.tif'
                         southFilename = stackB_Prefix + '_' + curBand + '.tif'
-      
+
                         northFullname = os.path.join(stackA_Dir, northFilename)
                         southFullname = os.path.join(stackB_Dir, southFilename)
                         mosaicFullName = os.path.join(tileDir, mosaicFileName)
-      
+
                         warpCmd = gdalwarpLoc + ' -te ' + cutLimits + clipParams + \
                                           southFullname + ' ' + northFullname + ' ' + mosaicFullName
                         if (debug):
@@ -530,21 +530,21 @@ def processScenes(segment):
                             tileErrorHasOccurred = True
                             sceneState = "ERROR"
                             continue
-      
+
                         if (curBand == 'toa_band1'):                                    # needed for lineage file generation later
                             lineage01 = northFullname
                             lineage02 = southFullname
-      
+
                     else:                                                                          # 3 contributing scenes
                         northFilename = stackA_Prefix + '_' + curBand + '.tif'
                         midFilename = stackB_Prefix + '_' + curBand + '.tif'
                         southFilename = stackC_Prefix + '_' + curBand + '.tif'
-      
+
                         northFullname = os.path.join(stackA_Dir, northFilename)
                         midFullname = os.path.join(stackB_Dir, midFilename)
                         southFullname = os.path.join(stackC_Dir, southFilename)
                         mosaicFullName = os.path.join(tileDir, mosaicFileName)
-      
+
                         warpCmd = gdalwarpLoc + ' -te ' + cutLimits + clipParams + southFullname + \
                                           ' ' + midFullname + ' ' + northFullname + ' ' + mosaicFullName
                         if (debug):
@@ -557,12 +557,12 @@ def processScenes(segment):
                             tileErrorHasOccurred = True
                             sceneState = "ERROR"
                             continue
-      
+
                         if (curBand == 'toa_band1'):                                    # needed for lineage file generation later
                             lineage01 = northFullname
                             lineage02 = midFullname
                             lineage03 = southFullname
-      
+
                     logger.info('    End processing for: {0}'.format(curBand))
 
                     if (curBand == 'toa_band1') or (curBand == 'toa_band2') or (curBand == 'toa_band3') or \
@@ -577,30 +577,30 @@ def processScenes(segment):
 
                     if (curBand == 'bt_band6'):
                       btFinishedList.append(mosaicFileName)
- 
+
                     if (curBand == 'sr_atmos_opacity'):
                         srFinishedList.append(mosaicFileName)
                         qaFinishedList.append(mosaicFileName)
-      
+
                                                                       # save for browse later
                     if (curBand == 'toa_band3') or (curBand == 'toa_band4') or (curBand == 'toa_band5'):
                         browseList.append(mosaicFileName)
-      
-      
+
+
 # --------------------------------------------------------------------------------------------------------------------------- #
 #
 #     Band Type 2
 #
 #                   16 bit signed integer
 #     		NoData = -32768
-#     
+#
                 logger.info('band type 2')
                 for curBand in bandType02:
-                      
+
                     if (tileErrorHasOccurred):
                         continue
                     logger.info('     Start processing for band: {0}'.format(curBand))
-      
+
                     clipParams = ' -dstnodata "-32768" -srcnodata "-32768" '
                     clipParams = clipParams + '-co "compress=deflate" -co "zlevel=9" -co "tiled=yes" -co "predictor=2" '
                     newARDname = getARDName(curBand, filenameCrosswalk)
@@ -610,8 +610,8 @@ def processScenes(segment):
                         sceneState = "ERROR"
                         continue
                     mosaicFileName = tile_id + '_' + newARDname + '.tif'
-      
-      
+
+
                     if (numScenesPerTile == 1):                                     # 1 contributing scene
                         sceneFullName = os.path.join(stackA_Dir, stackA_Prefix + '_' + curBand + '.tif')
                         mosaicFullName = os.path.join(tileDir, mosaicFileName)
@@ -627,8 +627,8 @@ def processScenes(segment):
                             tileErrorHasOccurred = True
                             sceneState = "ERROR"
                             continue
-      
-      
+
+
                     elif (numScenesPerTile == 2):                                     # 2 contributing scenes
                         northFilename = stackA_Prefix + '_' + curBand + '.tif'
                         southFilename = stackB_Prefix + '_' + curBand + '.tif'
@@ -649,8 +649,8 @@ def processScenes(segment):
                             tileErrorHasOccurred = True
                             sceneState = "ERROR"
                             continue
-      
-      
+
+
                     else:                                                                          # 3 contributing scenes
                         northFilename = stackA_Prefix + '_' + curBand + '.tif'
                         midFilename = stackB_Prefix + '_' + curBand + '.tif'
@@ -673,14 +673,14 @@ def processScenes(segment):
                             tileErrorHasOccurred = True
                             sceneState = "ERROR"
                             continue
-      
+
                     logger.info('    End processing for: {0}'.format(curBand))
-      
-      
+
+
                     if (curBand == 'solar_azimuth_band4') or (curBand == 'solar_zenith_band4') or \
                        (curBand == 'sensor_azimuth_band4') or (curBand == 'sensor_zenith_band4'):
                         toaFinishedList.append(mosaicFileName)
-      
+
       # --------------------------------------------------------------------------------------------------------------------------- #
       #
       #     Band Type 3
@@ -688,23 +688,23 @@ def processScenes(segment):
       #     		16 bit unsigned integer
       #		NoData = 1  in ovelap areas and scan gaps
       #
-      #     
+      #
                 logger.info('band type 3')
                 for curBand in bandType03:
-                     
+
                     if (tileErrorHasOccurred):
                         continue
                     logger.info('    Start processing for: {0}'.format(curBand))
-  
+
                     clipParams = ' -dstnodata "1" -srcnodata "1" '
                     tempFileName = targzMission + '_' + collectionLevel + '_' + curTile[0][0] + curTile[0][1] + \
                                              '_' + targzYear + acqMonth + acqDay + '_' + curBand + '_m0.tif'
                     tempFullName = os.path.join(tileDir, tempFileName)
-      
+
                     if (numScenesPerTile == 1):                                                     # 1 contributing scene
                         inputFileName = stackA_Prefix + '_' + curBand + '.tif'
                         inputFullName = os.path.join(stackA_Dir, inputFileName)
-      
+
                         warpCmd = gdalwarpLoc + ' -te ' + cutLimits + clipParams + inputFullName + ' '  + tempFullName
                         if (debug):
                             logger.info('        mosaic: {0}'.format(warpCmd))
@@ -716,14 +716,14 @@ def processScenes(segment):
                             tileErrorHasOccurred = True
                             sceneState = "ERROR"
                             continue
-      
+
                     elif (numScenesPerTile == 2):                                                   # 2 contributing scenes
                         northFilename = stackA_Prefix + '_' + curBand + '.tif'
                         southFilename = stackB_Prefix + '_' + curBand + '.tif'
-      
+
                         northFullname = os.path.join(stackA_Dir, northFilename)
                         southFullname = os.path.join(stackB_Dir, southFilename)
-      
+
                         warpCmd = gdalwarpLoc + ' -te ' + cutLimits + clipParams + \
                                     southFullname + ' ' + northFullname + ' ' + tempFullName
                         if (debug):
@@ -736,16 +736,16 @@ def processScenes(segment):
                             tileErrorHasOccurred = True
                             sceneState = "ERROR"
                             continue
-      
+
                     else:                                                                                        # 3 contributing scenes
                         northFilename = stackA_Prefix + '_' + curBand + '.tif'
                         midFilename = stackB_Prefix + '_' + curBand + '.tif'
                         southFilename = stackC_Prefix + '_' + curBand + '.tif'
-      
+
                         northFullname = os.path.join(stackA_Dir, northFilename)
                         midFullname = os.path.join(stackB_Dir, midFilename)
                         southFullname = os.path.join(stackC_Dir, southFilename)
-      
+
                         warpCmd = gdalwarpLoc + ' -te ' + cutLimits + clipParams + southFullname + \
                                           ' ' + midFullname + ' ' + northFullname + ' ' + tempFullName
                         if (debug):
@@ -758,14 +758,14 @@ def processScenes(segment):
                             tileErrorHasOccurred = True
                             sceneState = "ERROR"
                             continue
-      
+
                                                                     # reassign nodata
                     clipParams = ' -dstnodata "0" -srcnodata "None" '
                     clipParams = clipParams + '-co "compress=deflate" -co "zlevel=9" -co "tiled=yes" -co "predictor=2" '
                     mosaicFileName = targzMission + '_' + collectionLevel + '_' + curTile[0][0] + curTile[0][1] + \
                                                '_' + targzYear + acqMonth + acqDay + '_' + curBand + '.tif'
                     mosaicFullName = os.path.join(tileDir, mosaicFileName)
-      
+
                     warpCmd = gdalwarpLoc + clipParams + tempFullName + ' ' + mosaicFullName
                     if (debug):
                         logger.info('        reassign nodata & compress: {0}'.format(warpCmd))
@@ -779,10 +779,10 @@ def processScenes(segment):
                         continue
 
                     logger.info('    End processing for: {0}'.format(curBand))
-      
+
                     finishedMosaicList.append(mosaicFileName)
-      
-      
+
+
 # --------------------------------------------------------------------------------------------------------------------------- #
 #
 #     Band Type 4
@@ -791,16 +791,16 @@ def processScenes(segment):
 #
 #		8 bit unsigned integer
 #                   NoData = 1   in overlap area and within scene footprint
-#		Valid data = 0 - 255 
+#		Valid data = 0 - 255
 #
-#      
+#
                 logger.info('band type 4')
                 for curBand in bandType04:
-                      
+
                     if (tileErrorHasOccurred):
                         continue
                     logger.info('    Start processing for: {0}'.format(curBand))
-      
+
                     newARDname = getARDName(curBand, filenameCrosswalk)
                     if (newARDname == 'ERROR'):
                         logger.error('Error in filenameCrosswalk for: {0}'.format(curBand))
@@ -808,14 +808,14 @@ def processScenes(segment):
                         sceneState = "ERROR"
                         continue
                     baseName = tile_id + '_' + newARDname
-      
+
                     if (numScenesPerTile == 1):                                                         # 1 contributing scene
                         inputFileName = stackA_Prefix + '_' + curBand + '.tif'
                         inputFullName = os.path.join(stackA_Dir, inputFileName)
-      
+
                         clipParams = ' -dstnodata "1" -srcnodata "1" '
                         clipParams = clipParams + '-co "compress=deflate" -co "zlevel=9" -co "tiled=yes" -co "predictor=2" '
-      
+
                         mosaicFileName = baseName + '.tif'
                         mosaicFullName = os.path.join(tileDir, mosaicFileName)
                         warpCmd = gdalwarpLoc + ' -te ' + cutLimits + clipParams + inputFullName + ' ' + mosaicFullName
@@ -829,16 +829,16 @@ def processScenes(segment):
                             tileErrorHasOccurred = True
                             sceneState = "ERROR"
                             continue
-      
+
                     elif (numScenesPerTile == 2):                                                       # 2 contributing scenes
                         northFilename = stackA_Prefix + '_' + curBand + '.tif'
                         southFilename = stackB_Prefix + '_' + curBand + '.tif'
-      
+
                         northFullname = os.path.join(stackA_Dir, northFilename)
                         southFullname = os.path.join(stackB_Dir, southFilename)
-      
+
                         clipParams = ' -dstnodata "1" -srcnodata "1" '
-      
+
                                                                     # North - Clip to fill entire tile
                         tempName0 =  baseName + '_n0.tif'
                         warpCmd = gdalwarpLoc + ' -te ' + cutLimits + clipParams + \
@@ -853,7 +853,7 @@ def processScenes(segment):
                             tileErrorHasOccurred = True
                             sceneState = "ERROR"
                             continue
-      
+
                                                                     # South - Clip 2nd only
                         tempName1 = baseName + '_s0.tif'
                         warpCmd = gdalwarpLoc + ' -te ' + cutLimits + clipParams + \
@@ -868,7 +868,7 @@ def processScenes(segment):
                             tileErrorHasOccurred = True
                             sceneState = "ERROR"
                             continue
-      
+
                                                                     # mosaic
                         clipParams = '-co "compress=deflate" -co "zlevel=9" -co "tiled=yes" -co "predictor=2" '
                         mosaicFileName = baseName + '.tif'
@@ -884,18 +884,18 @@ def processScenes(segment):
                             tileErrorHasOccurred = True
                             sceneState = "ERROR"
                             continue
-      
+
                     else:                                                                                             # 3 contributing scenes
                         northFilename = stackA_Prefix + '_' + curBand + '.tif'
                         midFilename = stackB_Prefix + '_' + curBand + '.tif'
                         southFilename = stackC_Prefix + '_' + curBand + '.tif'
-      
+
                         northFullname = os.path.join(stackA_Dir, northFilename)
                         midFullname = os.path.join(stackB_Dir, midFilename)
                         southFullname = os.path.join(stackC_Dir, southFilename)
-      
+
                         clipParams = ' -dstnodata "1" -srcnodata "1" '
-      
+
                                                                     # North - Clip to fill entire tile
                         tempName0 =  baseName + '_n0.tif'
                         warpCmd = gdalwarpLoc + ' -te ' + cutLimits + clipParams + \
@@ -910,7 +910,7 @@ def processScenes(segment):
                             tileErrorHasOccurred = True
                             sceneState = "ERROR"
                             continue
-      
+
                                                                     # Middle - Clip 2nd only
                         tempName1 = baseName + '_mid.tif'
                         warpCmd = gdalwarpLoc + ' -te ' + cutLimits + clipParams + \
@@ -925,7 +925,7 @@ def processScenes(segment):
                             tileErrorHasOccurred = True
                             sceneState = "ERROR"
                             continue
-      
+
                                                                     # South - Clip 3rd only
                         tempName2 = baseName + '_s0.tif'
                         warpCmd = gdalwarpLoc + ' -te ' + cutLimits + clipParams + \
@@ -940,7 +940,7 @@ def processScenes(segment):
                             tileErrorHasOccurred = True
                             sceneState = "ERROR"
                             continue
-      
+
                                                                     # mosaic
                         clipParams = '-co "compress=deflate" -co "zlevel=9" -co "tiled=yes" -co "predictor=2" '
                         mosaicFileName = baseName + '.tif'
@@ -957,7 +957,7 @@ def processScenes(segment):
                             tileErrorHasOccurred = True
                             sceneState = "ERROR"
                             continue
-      
+
                     if (curBand == 'pixel_qa'):
                         pixelQATile = os.path.join(tileDir, mosaicFileName)
                         pixelQATile256 = pixelQATile.replace('PIXELQA', 'PIXELQA256')
@@ -970,8 +970,8 @@ def processScenes(segment):
                         qaFinishedList.append(mosaicFileName)
 
                     logger.info('    End processing for: {0}'.format(curBand))
-      
-      
+
+
       # --------------------------------------------------------------------------------------------------------------------------- #
       #
       #                                                       Create the lineage file
@@ -980,10 +980,10 @@ def processScenes(segment):
                 logger.info('Creating lineage file')
                 if (tileErrorHasOccurred):
                     continue
-      
+
                 lineageFileName = tile_id + '_LINEAGEQA.tif'
 
-                                                                        
+
                 if (numScenesPerTile == 1):                                   # 1 contributing scene
 
                     calcExpression = ' --calc="' + str(stackA_Value) + ' * (A > -101)"'
@@ -1001,7 +1001,7 @@ def processScenes(segment):
                         tileErrorHasOccurred = True
                         sceneState = "ERROR"
                         continue
-      
+
                                                                                             # 1 contributing scene-  compress
                     clipParams = ' -co "compress=deflate" -co "zlevel=9" -co "tiled=yes" -co "predictor=2" '
                     warpCmd = gdalwarpLoc +  clipParams + lineageTempFullName + ' ' + lineageFullName
@@ -1015,7 +1015,7 @@ def processScenes(segment):
                         tileErrorHasOccurred = True
                         sceneState = "ERROR"
                         continue
-      
+
                 elif (numScenesPerTile == 2):                                      # 2 contributing scenes - north
                     northCalcExp = ' --calc="' + str(stackA_Value) + ' * (A > -101)"'
                     northTempName = lineageFullName.replace('.tif', '_srcTempN.tif')
@@ -1032,7 +1032,7 @@ def processScenes(segment):
                         tileErrorHasOccurred = True
                         sceneState = "ERROR"
                         continue
-      
+
                                                                                        # 2 contributing scenes - south
                     southCalcExp = ' --calc="' + str(stackB_Value) + ' * (A > -101)"'
                     southTempName = lineageFullName.replace('.tif', '_srcTempS.tif')
@@ -1049,7 +1049,7 @@ def processScenes(segment):
                         tileErrorHasOccurred = True
                         sceneState = "ERROR"
                         continue
-      
+
                                                                                         # 2 contributing scenes - mosaic North over South
                     clipParams = ' -dstnodata "0" -srcnodata "0" -ot "Byte" -wt "Byte" '
                     clipParams = clipParams + '-co "compress=deflate" -co "zlevel=9" -co "tiled=yes" -co "predictor=2" '
@@ -1065,7 +1065,7 @@ def processScenes(segment):
                         tileErrorHasOccurred = True
                         sceneState = "ERROR"
                         continue
-      
+
                 else:                                                         # 3 contributing scenes - north
                     northCalcExp = ' --calc="' + str(stackA_Value) + ' * (A > -101)"'
                     northTempName = lineageFullName.replace('.tif', '_srcTempN.tif')
@@ -1137,7 +1137,7 @@ def processScenes(segment):
                 btFinishedList.append(lineageFileName)
                 srFinishedList.append(lineageFileName)
                 qaFinishedList.append(lineageFileName)
-    
+
                 logger.info('    End building lineage file')
 
 
@@ -1145,20 +1145,20 @@ def processScenes(segment):
 #
 #         Check to see how many "contributing" scenes were actually used.  We need this check because of the
 #         end overlap between scenes.  For example, when we calculated the number of contributing scenes
-#         earlier in the processing, we performed a simple intersect between the scene footprint and the tile 
+#         earlier in the processing, we performed a simple intersect between the scene footprint and the tile
 #         footprint.  Because of end overlap, we may not have actually used a scene, even though it intersected
 #         the tile.
 #
-#         For this check, find the highest value in the lineage file by calculating a histogram.  This will tell us 
+#         For this check, find the highest value in the lineage file by calculating a histogram.  This will tell us
 #         how many scenes were  actually used for this tile.
 #
 
                 if (tileErrorHasOccurred):
                     continue
                 logger.info('    Start checking contributing scenes')
-    
+
                 sceneHistFilename = os.path.join(tileDir, 'scenes.json')
-    
+
                 sceneCmd = gdalinfoLoc + ' -hist ' + lineageFullName + ' >> ' + sceneHistFilename
                 if (debug):
                     logger.info('        > sceneCmd: {0}'.format(sceneCmd))
@@ -1248,7 +1248,7 @@ def processScenes(segment):
 
                 logger.info('finish updating contributing scenes')
 
-		    
+
 # --------------------------------------------------------------------------------------------------------------------------- #
 #
 #     Band Type 5
@@ -1259,16 +1259,16 @@ def processScenes(segment):
 #
 #                   Because there is no real NoData value, we can't differentiate between pixels within the
 #                   footprint and pixels outside the footprint.  This is a problem in the overlap areas.  Therefore,
-#                   we will use the lineage file to specify which pixels from these bands are derived from the 
+#                   we will use the lineage file to specify which pixels from these bands are derived from the
 #                   various input scenes.
-#   
+#
                 logger.info('band type 5')
                 for curBand in bandType05:
-                   
+
                     if (tileErrorHasOccurred):
-                        continue 
+                        continue
                     logger.info('    Start processing for: {0}'.format(curBand))
-      
+
                     newARDname = getARDName(curBand, filenameCrosswalk)
                     if (newARDname == 'ERROR'):
                         logger.error('Error in filenameCrosswalk for: {0}'.format(curBand))
@@ -1276,14 +1276,14 @@ def processScenes(segment):
                         sceneState = "ERROR"
                         continue
                     baseName = tile_id + '_' + newARDname
-      
-                                                                        # 
+
+                                                                        #
                                                                         # Only 1 contributing scene
-                                                                        # 
-                                                                        # Perform a simple clip and then 
+                                                                        #
+                                                                        # Perform a simple clip and then
                                                                         # reassign any NoData back to zero
                                                                         #
-                    if (contribSceneCount == 1): 
+                    if (contribSceneCount == 1):
                         if contribScenePixCountArray[0] > 0:
                             inputFileName = stackA_Prefix + '_' + curBand + '.tif'
                             inputFullName = os.path.join(stackA_Dir, inputFileName)
@@ -1293,9 +1293,9 @@ def processScenes(segment):
                         elif contribScenePixCountArray[2] > 0:
                             inputFileName = stackC_Prefix + '_' + curBand + '.tif'
                             inputFullName = os.path.join(stackC_Dir, inputFileName)
-                  
+
                         clipParams = ' -dstnodata "0" -ot "Byte" -wt "Byte" '
-      
+
                                                                     # Clip to fill entire tile
                         tempFileName =  baseName + '_m0.tif'
                         tempFullName = os.path.join(tileDir, tempFileName)
@@ -1310,7 +1310,7 @@ def processScenes(segment):
                             tileErrorHasOccurred = True
                             sceneState = "ERROR"
                             continue
-      
+
                                                                     # reassign nodata & compress
                         clipParams = ' -dstnodata "None" -srcnodata "256" '
                         clipParams = clipParams + '-co "compress=deflate" -co "zlevel=9" -co "tiled=yes" -co "predictor=2" '
@@ -1327,43 +1327,43 @@ def processScenes(segment):
                             tileErrorHasOccurred = True
                             sceneState = "ERROR"
                             continue
-      
-                                                                        # 
-                                                                        # 2 contributing scenes 
-                                                                        # 
+
+                                                                        #
+                                                                        # 2 contributing scenes
+                                                                        #
                                                                         # Since there is no real NoData value in the source
                                                                         # scenes, we can't overlay the Northern scene on
-                                                                        # top of the Southern scene without obscuring 
-                                                                        # pixels in the overlap area.  
+                                                                        # top of the Southern scene without obscuring
+                                                                        # pixels in the overlap area.
                                                                         #
                                                                         # We will use the newly created lineage tile to mask
                                                                         # only those pixels we want for each contributing
-                                                                        # scene.  Then we can re-combine the results of the 
+                                                                        # scene.  Then we can re-combine the results of the
                                                                         # two mask operations.
                                                                         #
 
-                    elif (contribSceneCount == 2): 
+                    elif (contribSceneCount == 2):
                         if contribScenePixCountArray[0] > 0 and contribScenePixCountArray[1] > 0:
                             northFilename = stackA_Prefix + '_' + curBand + '.tif'
                             southFilename = stackB_Prefix + '_' + curBand + '.tif'
-      
+
                             northFullname = os.path.join(stackA_Dir, northFilename)
                             southFullname = os.path.join(stackB_Dir, southFilename)
                         elif contribScenePixCountArray[0] > 0 and contribScenePixCountArray[2] > 0:
                             northFilename = stackA_Prefix + '_' + curBand + '.tif'
                             southFilename = stackC_Prefix + '_' + curBand + '.tif'
-      
+
                             northFullname = os.path.join(stackA_Dir, northFilename)
                             southFullname = os.path.join(stackC_Dir, southFilename)
                         elif contribScenePixCountArray[1] > 0 and contribScenePixCountArray[2] > 0:
                             northFilename = stackB_Prefix + '_' + curBand + '.tif'
                             southFilename = stackC_Prefix + '_' + curBand + '.tif'
-      
+
                             northFullname = os.path.join(stackB_Dir, northFilename)
                             southFullname = os.path.join(stackC_Dir, southFilename)
-      
+
                         clipParams = ' -dstnodata "0" -ot "Byte" -wt "Byte" '
-      
+
                                                                     # North - Clip to fill entire tile
                         clipFileNameN =  baseName + '_n0.tif'
                         clipFullNameN = os.path.join(tileDir, clipFileNameN)
@@ -1379,7 +1379,7 @@ def processScenes(segment):
                             tileErrorHasOccurred = True
                             sceneState = "ERROR"
                             continue
-      
+
                                                                     # South - Clip 2nd only
                         clipFileNameS = baseName + '_s0.tif'
                         clipFullNameS = os.path.join(tileDir, clipFileNameS)
@@ -1465,31 +1465,31 @@ def processScenes(segment):
                             sceneState = "ERROR"
                             continue
 
-                                                                        # 
-                                                                        # 3 contributing scenes 
-                                                                        # 
+                                                                        #
+                                                                        # 3 contributing scenes
+                                                                        #
                                                                         # Since there is no real NoData value in the source
                                                                         # scenes, we can't overlay the Northern scene on
-                                                                        # top of the Southern scenes without obscuring 
-                                                                        # pixels in the overlap area.  
+                                                                        # top of the Southern scenes without obscuring
+                                                                        # pixels in the overlap area.
                                                                         #
                                                                         # We will use the newly created lineage tile to mask
                                                                         # only those pixels we want for each contributing
-                                                                        # scene.  Then we can re-combine the results of the 
+                                                                        # scene.  Then we can re-combine the results of the
                                                                         # three mask operations.
                                                                         #
 
-                    else:                                                                                       
+                    else:
                         northFilename = stackA_Prefix + '_' + curBand + '.tif'
                         midFilename = stackB_Prefix + '_' + curBand + '.tif'
                         southFilename = stackC_Prefix + '_' + curBand + '.tif'
-      
+
                         northFullname = os.path.join(stackA_Dir, northFilename)
                         midFullname = os.path.join(stackB_Dir, midFilename)
                         southFullname = os.path.join(stackC_Dir, southFilename)
-      
+
                         clipParams = ' -dstnodata "0" -ot "Byte" -wt "Byte" '
-      
+
                                                                     # North - Clip to fill entire tile
                         clipFileNameN =  baseName + '_n0.tif'
                         clipFullNameN = os.path.join(tileDir, clipFileNameN)
@@ -1505,7 +1505,7 @@ def processScenes(segment):
                             tileErrorHasOccurred = True
                             sceneState = "ERROR"
                             continue
-      
+
                                                                     # Mid - Clip 2nd only
                         clipFileNameM =  baseName + '_mid.tif'
                         clipFullNameM = os.path.join(tileDir, clipFileNameM)
@@ -1521,7 +1521,7 @@ def processScenes(segment):
                             tileErrorHasOccurred = True
                             sceneState = "ERROR"
                             continue
-      
+
                                                                     # South - Clip 3rd only
                         clipFileNameS = baseName + '_s0.tif'
                         clipFullNameS = os.path.join(tileDir, clipFileNameS)
@@ -1537,7 +1537,7 @@ def processScenes(segment):
                             tileErrorHasOccurred = True
                             sceneState = "ERROR"
                             continue
-      
+
                                                               # Mask the North using the lineage file
                         maskNameN = baseName + '_n0mask.tif'
                         maskFullNameN = os.path.join(tileDir, maskNameN)
@@ -1555,7 +1555,7 @@ def processScenes(segment):
                             tileErrorHasOccurred = True
                             sceneState = "ERROR"
                             continue
-      
+
                                                               # Mask the Middle using the lineage file
                         maskNameM = baseName + '_midmask.tif'
                         maskFullNameM = os.path.join(tileDir, maskNameM)
@@ -1573,7 +1573,7 @@ def processScenes(segment):
                             tileErrorHasOccurred = True
                             sceneState = "ERROR"
                             continue
-      
+
                                                               # Mask the South using the lineage file
                         maskNameS = baseName + '_s0mask.tif'
                         maskFullNameS = os.path.join(tileDir, maskNameS)
@@ -1591,7 +1591,7 @@ def processScenes(segment):
                             tileErrorHasOccurred = True
                             sceneState = "ERROR"
                             continue
-      
+
                                                                     # mosaic
                         tempFileName =  baseName + '_m0.tif'
                         tempFullName = os.path.join(tileDir, tempFileName)
@@ -1607,7 +1607,7 @@ def processScenes(segment):
                             tileErrorHasOccurred = True
                             sceneState = "ERROR"
                             continue
-      
+
                                                                     # reassign nodata
                         clipParams = ' -dstnodata "None" -srcnodata "256" '
                         clipParams = clipParams + '-co "compress=deflate" -co "zlevel=9" -co "tiled=yes" -co "predictor=2" '
@@ -1624,14 +1624,14 @@ def processScenes(segment):
                             tileErrorHasOccurred = True
                             sceneState = "ERROR"
                             continue
-      
-      
+
+
                     if (curBand == 'sr_cloud_qa'):
                         srFinishedList.append(mosaicFileName)
                         qaFinishedList.append(mosaicFileName)
 
                     logger.info('    End processing for: {0}'.format(curBand))
-      
+
 
       # --------------------------------------------------------------------------------------------------------------------------- #
       #
@@ -1640,8 +1640,8 @@ def processScenes(segment):
                 logger.info('Creating metadata')
                 if (tileErrorHasOccurred):
                     continue
-          
-      
+
+
                 statsTuple = raster_value_count(pixelQATile, False)
                 if (len(statsTuple) == 1):
                     logger.error('        Error {0} pixel counts.'.format(pixelQATile))
@@ -1656,20 +1656,20 @@ def processScenes(segment):
                     logger.info('        # pixels Snow: {0}'.format(str(statsTuple[3])))
                     logger.info('        # pixels CloudShadow: {0}'.format(str(statsTuple[4])))
                     logger.info('        # pixels CloudCover: {0}'.format(str(statsTuple[5])))
-      
+
                                                         #
                                                         # Create the tile metadata file
                                                         #
-      
+
 
                 L2Scene01MetaFileName = ''
                 L1Scene01MetaFileName = ''
                 L1Scene01MetaString = ''
-    
+
                 L2Scene02MetaFileName = ''
                 L1Scene02MetaFileName = ''
                 L1Scene02MetaString = ''
-    
+
                 L2Scene03MetaFileName = ''
                 L1Scene03MetaFileName = ''
                 L1Scene03MetaString = ''
@@ -1713,7 +1713,7 @@ def processScenes(segment):
                                                   L2Scene03MetaFileName, L1Scene03MetaString, \
                                                   appVersion, productionDateTime, filenameCrosswalk, \
                                                   region, contribSceneCount, metaFullName)
-      
+
                 if 'ERROR' in metaResults:
                     logger.error('Error: writing metadata file')
                     logger.error('        Error: {0}'.format(traceback.format_exc()))
@@ -1747,8 +1747,8 @@ def processScenes(segment):
                 qaFinishedList.append(metaFileName)
 
                 logger.info('    End metadata')
-      
-      
+
+
       # --------------------------------------------------------------------------------------------------------------------------- #
       #
       #                                                       Package all of the Landsat  mosaics into the .tar files
@@ -1757,7 +1757,7 @@ def processScenes(segment):
                 logger.info('start creating tar files')
                 if (tileErrorHasOccurred):
                     continue
-    
+
                                                                # toa
                 toaFullName = os.path.join(tgzOutputDir, tile_id + "_TA.tar")
                 try:
@@ -1774,7 +1774,7 @@ def processScenes(segment):
                     continue
 
                 make_file_group_writeable(toaFullName)
-      
+
                                                                # bt
                 btFullName = os.path.join(tgzOutputDir, tile_id + "_BT.tar")
                 try:
@@ -1844,7 +1844,7 @@ def processScenes(segment):
                         grnBand = browseBand
                     else:
                         bluBand = browseBand
-      
+
                                                                 # merge r,g,b bands
                 brw1FileName = tile_id + '_brw1.tif'
                 brw1FullName = os.path.join(tileDir, brw1FileName)
@@ -1893,7 +1893,7 @@ def processScenes(segment):
                     tileErrorHasOccurred = True
                     sceneState = "ERROR"
                     continue
-    
+
                                                                 # internal pyramids
                 browseCmd4 = gdaladdoLoc + ' ' + brw3FullName + ' 2 4 8 16'
                 if (debug):
@@ -1906,7 +1906,7 @@ def processScenes(segment):
                     tileErrorHasOccurred = True
                     sceneState = "ERROR"
                     continue
-    
+
                                                                 # move to final location
                 browseFileName = tile_id + '.tif'
                 browseFullName = os.path.join(browseOutputDir, browseFileName)
@@ -1952,7 +1952,7 @@ def processScenes(segment):
                 btMD5Name = btFullName.replace(".tar", ".md5")
                 srMD5Name = srFullName.replace(".tar", ".md5")
                 qaMD5Name = qaFullName.replace(".tar", ".md5")
-    
+
                 toaHash =  hashlib.md5(open(toaFullName, 'rb').read()).hexdigest()
                 btHash =  hashlib.md5(open(btFullName, 'rb').read()).hexdigest()
                 srHash =  hashlib.md5(open(srFullName, 'rb').read()).hexdigest()
@@ -1962,7 +1962,7 @@ def processScenes(segment):
                 btFileName = os.path.basename(btFullName)
                 srFileName = os.path.basename(srFullName)
                 qaFileName = os.path.basename(qaFullName)
-    
+
                 try:
                     outfile = open(toaMD5Name, 'w')
                     outfile.write(toaHash + ' ' + toaFileName)
@@ -1988,7 +1988,7 @@ def processScenes(segment):
                     continue
 
                 make_file_group_writeable(btMD5Name)
-   
+
                 try:
                     outfile = open(srMD5Name, 'w')
                     outfile.write(srHash + ' ' + srFileName)
