@@ -55,6 +55,17 @@ bandType05 = [ 'sr_cloud_qa' ]
 
 #bandType01 = ['toa_band1', 'toa_band3', 'toa_band4', 'toa_band5']       # for testing purposes...
 
+bands_for_toa = ('toa_band1', 'toa_band2', 'toa_band3', 'toa_band4', 'toa_band5'
+                 'toa_band7', 'solar_azimuth_band4', 'solar_zenith_band4',
+                 'sensor_azimuth_band4', 'sensor_zenith_band4', 'radsat_qa',
+                 'pixel_qa')
+bands_for_bt = ('bt_band6', 'radsat_qa', 'pixel_qa')
+bands_for_sr = ('sr_band1', 'sr_band2', 'sr_band3', 'sr_band4', 'sr_band5',
+                'sr_band7', 'sr_atmos_opacity', 'sr_cloud_qa', 'radsat_qa',
+                'pixel_qa')
+bands_for_pqa = ('sr_atmos_opacity', 'sr_cloud_qa', 'radsat_qa', 'pixel_qa', 'st_qa')
+bands_for_browse = ('toa_band3', 'toa_band4', 'toa_band5')
+
 finalDirectoryLU = {
                '4': 'tm',
                '5': 'tm',
@@ -565,25 +576,20 @@ def processScenes(segment):
 
                     logger.info('    End processing for: {0}'.format(curBand))
 
-                    if (curBand == 'toa_band1') or (curBand == 'toa_band2') or (curBand == 'toa_band3') or \
-                       (curBand == 'toa_band4') or (curBand == 'toa_band5') or (curBand == 'toa_band7') or \
-                       (curBand == 'solar_azimuth_band4') or (curBand == 'solar_zenith_band4') or \
-                       (curBand == 'sensor_azimuth_band4') or (curBand == 'sensor_zenith_band4'):
+                    if curBand in bands_for_toa:
                         toaFinishedList.append(mosaicFileName)
 
-                    if (curBand == 'sr_band1') or (curBand == 'sr_band2') or (curBand == 'sr_band3') or \
-                       (curBand == 'sr_band4') or (curBand == 'sr_band5') or (curBand == 'sr_band7'):
+                    if curBand in bands_for_sr:
                         srFinishedList.append(mosaicFileName)
 
-                    if (curBand == 'bt_band6'):
+                    if curBand in bands_for_bt:
                       btFinishedList.append(mosaicFileName)
 
-                    if (curBand == 'sr_atmos_opacity'):
-                        srFinishedList.append(mosaicFileName)
+                    if curBand in bands_for_pqa:
                         qaFinishedList.append(mosaicFileName)
 
                                                                       # save for browse later
-                    if (curBand == 'toa_band3') or (curBand == 'toa_band4') or (curBand == 'toa_band5'):
+                    if curBand in bands_for_browse:
                         browseList.append(mosaicFileName)
 
 
@@ -677,8 +683,7 @@ def processScenes(segment):
                     logger.info('    End processing for: {0}'.format(curBand))
 
 
-                    if (curBand == 'solar_azimuth_band4') or (curBand == 'solar_zenith_band4') or \
-                       (curBand == 'sensor_azimuth_band4') or (curBand == 'sensor_zenith_band4'):
+                    if curBand in bands_for_toa:
                         toaFinishedList.append(mosaicFileName)
 
       # --------------------------------------------------------------------------------------------------------------------------- #
@@ -963,10 +968,16 @@ def processScenes(segment):
                         pixelQATile256 = pixelQATile.replace('PIXELQA', 'PIXELQA256')
                         histFilename = os.path.join(tileDir, 'hist.json')
 
-                    if (curBand == 'radsat_qa') or (curBand == 'pixel_qa'):
+                    if curBand in bands_for_toa:
                         toaFinishedList.append(mosaicFileName)
+
+                    if curBand in bands_for_bt:
                         btFinishedList.append(mosaicFileName)
+
+                    if curBand in bands_for_sr:
                         srFinishedList.append(mosaicFileName)
+
+                    if curBand in bands_for_pqa:
                         qaFinishedList.append(mosaicFileName)
 
                     logger.info('    End processing for: {0}'.format(curBand))
@@ -1626,8 +1637,10 @@ def processScenes(segment):
                             continue
 
 
-                    if (curBand == 'sr_cloud_qa'):
+                    if curBand in bands_for_sr:
                         srFinishedList.append(mosaicFileName)
+
+                    if curBand in bands_for_pqa:
                         qaFinishedList.append(mosaicFileName)
 
                     logger.info('    End processing for: {0}'.format(curBand))
