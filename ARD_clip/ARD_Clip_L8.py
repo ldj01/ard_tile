@@ -57,7 +57,7 @@ filenameCrosswalk = [
 
     ('st_downwelled_radiance', 'DRAD'), ('st_upwelled_radiance', 'URAD'),
     ('st_thermal_radiance', 'TRAD'), ('st_atmospheric_transmittance', 'ATRAN'),
-    ('emis', 'EMIS'), ('emis_stdev', 'EMISDEV'), ('st_cloud_distance', 'CDIST')
+    ('emis', 'EMIS'), ('emis_stdev', 'EMISDEV'), ('st_cloud_distance', 'CDIST'),
     ('st_qa', 'STQA'), ('surface_temperature', 'ST'),
 
 ]
