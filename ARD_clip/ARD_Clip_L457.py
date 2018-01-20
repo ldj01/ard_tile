@@ -33,28 +33,59 @@ from ARD_metadata import buildMetadata
 #
 appVersion = "ARD Tile 1.0"                              # Currently unused... if used, would end up in the metadata
 
-				                                       # Landsat 4-7 crosswalk
-filenameCrosswalk = [('toa_band1', 'TAB1'), ('toa_band2', 'TAB2'), ('toa_band3', 'TAB3'), \
-                                 ('toa_band4', 'TAB4'), ('toa_band5', 'TAB5'), ('toa_band7', 'TAB7'), \
-                                 ('solar_azimuth_band4', 'SOA4'), ('solar_zenith_band4', 'SOZ4'), \
-                                 ('sensor_azimuth_band4', 'SEA4'), ('sensor_zenith_band4', 'SEZ4'), \
-                                 ('bt_band6', 'BTB6'), ('sr_band1', 'SRB1'), ('sr_band2', 'SRB2'), \
-                                 ('sr_band3', 'SRB3'), ('sr_band4', 'SRB4'), ('sr_band5', 'SRB5'), \
-                                 ('sr_band7', 'SRB7'), ('pixel_qa', 'PIXELQA'), ('radsat_qa', 'RADSATQA'), \
-                                 ('sr_atmos_opacity', 'SRATMOSOPACITYQA'), ('sr_cloud_qa', 'SRCLOUDQA')]
 
-				                                        # Define how each band will be processed
-bandType01 = [ 'toa_band1',  'toa_band2', 'toa_band3', 'toa_band4', 'toa_band5', 'toa_band7', \
-                          'sr_band1',   'sr_band2',   'sr_band3',  'sr_band4',  'sr_band5',   'sr_band7', \
-                         'bt_band6', 'sr_atmos_opacity']
+###### Define how each band will be grouped/renamed
+#
+filenameCrosswalk = [
+    ('toa_band1', 'TAB1'), ('toa_band2', 'TAB2'), ('toa_band3', 'TAB3'),
+    ('toa_band4', 'TAB4'), ('toa_band5', 'TAB5'), ('toa_band7', 'TAB7'),
+    ('solar_azimuth_band4', 'SOA4'), ('solar_zenith_band4', 'SOZ4'),
+    ('sensor_azimuth_band4', 'SEA4'), ('sensor_zenith_band4', 'SEZ4'),
+
+    ('bt_band6', 'BTB6'),
+
+    ('sr_band1', 'SRB1'), ('sr_band2', 'SRB2'),
+    ('sr_band3', 'SRB3'), ('sr_band4', 'SRB4'), ('sr_band5', 'SRB5'),
+    ('sr_band7', 'SRB7'), ('pixel_qa', 'PIXELQA'), ('radsat_qa', 'RADSATQA'),
+    ('sr_atmos_opacity', 'SRATMOSOPACITYQA'), ('sr_cloud_qa', 'SRCLOUDQA'),
+
+    ('dswe_diag', 'DIAG'), ('dswe_intrpd', 'INTR'),
+    ('dswe_mask', 'MASK'), ('dswe_pshsccss', 'INWM'),
+    ('percent_slope', 'SLOPE'), ('hillshade', 'SHADE'),
+
+    ('st_downwelled_radiance', 'DRAD'), ('st_upwelled_radiance', 'URAD'),
+    ('st_thermal_radiance', 'TRAD'), ('st_atmospheric_transmittance', 'ATRAN'),
+    ('emis', 'EMIS'), ('emis_stdev', 'EMISDEV'), ('st_cloud_distance', 'CDIST')
+    ('st_qa', 'STQA'), ('surface_temperature', 'ST'),
+]
+
+###### Define how each band will be processed
+#
+#   Band Group | NoData Value
+#   -----------+-------------
+#     1        | -9999
+#     2        | -32768
+#     3        |
+#     4        | 255
+#     5        | [NoData uses LINEAGE]
+bandType01 = [
+    'toa_band1',  'toa_band2', 'toa_band3', 'toa_band4', 'toa_band5', 'toa_band7',
+    'sr_band1',   'sr_band2',   'sr_band3',  'sr_band4',  'sr_band5',   'sr_band7',
+    'bt_band6', 'sr_atmos_opacity',
+    'dswe_diag',  'percent_slope',
+    'surface_temperature', 'st_downwelled_radiance', 'st_upwelled_radiance',
+    'st_thermal_radiance', 'st_atmospheric_transmittance', 'st_cloud_distance',
+    'emis', 'emis_stdev', 'st_qa'
+]
 bandType02 = [ 'solar_azimuth_band4', 'solar_zenith_band4', 'sensor_azimuth_band4', \
                          'sensor_zenith_band4' ]
 bandType03 = [ ]
-bandType04 = [ 'radsat_qa', 'pixel_qa' ]
+bandType04 = [ 'radsat_qa', 'pixel_qa',
+               'dswe_intrpd', 'dswe_mask', 'dswe_pshsccss', 'hillshade' ]
 bandType05 = [ 'sr_cloud_qa' ]
 
-#bandType01 = ['toa_band1', 'toa_band3', 'toa_band4', 'toa_band5']       # for testing purposes...
-
+###### Define how each package will be bundled
+#
 bands_for_toa = ('toa_band1', 'toa_band2', 'toa_band3', 'toa_band4', 'toa_band5'
                  'toa_band7', 'solar_azimuth_band4', 'solar_zenith_band4',
                  'sensor_azimuth_band4', 'sensor_zenith_band4', 'radsat_qa',
@@ -65,6 +96,11 @@ bands_for_sr = ('sr_band1', 'sr_band2', 'sr_band3', 'sr_band4', 'sr_band5',
                 'pixel_qa')
 bands_for_pqa = ('sr_atmos_opacity', 'sr_cloud_qa', 'radsat_qa', 'pixel_qa', 'st_qa')
 bands_for_browse = ('toa_band3', 'toa_band4', 'toa_band5')
+bands_for_swater = ('dswe_mask', 'dswe_diag', 'dswe_intrpd',
+                    'dswe_pshsccss', 'percent_slope', 'hillshade', 'pixel_qa')
+bands_for_stemp = ('surface_temperature', 'st_downwelled_radiance', 'st_upwelled_radiance',
+                   'st_thermal_radiance', 'emis', 'emis_stdev', 'st_cloud_distance',
+                   'st_atmospheric_transmittance', 'st_qa', 'pixel_qa')
 
 finalDirectoryLU = {
                '4': 'tm',
@@ -461,6 +497,8 @@ def processScenes(segment):
                 srFinishedList = []
                 qaFinishedList = []
                 browseList = []                                  # this list holds the 3 required (RGB) layers
+                swFinishedList = []
+                stFinishedList = []
 
                                                                # used for calculating the % snow, % cloud, etc...
                 pixelQATile = ''
@@ -583,10 +621,16 @@ def processScenes(segment):
                         srFinishedList.append(mosaicFileName)
 
                     if curBand in bands_for_bt:
-                      btFinishedList.append(mosaicFileName)
+                        btFinishedList.append(mosaicFileName)
 
                     if curBand in bands_for_pqa:
                         qaFinishedList.append(mosaicFileName)
+
+                    if curBand in bands_for_swater:
+                        swFinishedList.append(mosaicFileName)
+
+                    if curBand in bands_for_stemp:
+                        stFinishedList.append(mosaicFileName)
 
                                                                       # save for browse later
                     if curBand in bands_for_browse:
@@ -685,6 +729,21 @@ def processScenes(segment):
 
                     if curBand in bands_for_toa:
                         toaFinishedList.append(mosaicFileName)
+
+                    if curBand in bands_for_sr:
+                        srFinishedList.append(mosaicFileName)
+
+                    if curBand in bands_for_bt:
+                        btFinishedList.append(mosaicFileName)
+
+                    if curBand in bands_for_pqa:
+                        qaFinishedList.append(mosaicFileName)
+
+                    if curBand in bands_for_swater:
+                        swFinishedList.append(mosaicFileName)
+
+                    if curBand in bands_for_stemp:
+                        stFinishedList.append(mosaicFileName)
 
       # --------------------------------------------------------------------------------------------------------------------------- #
       #
@@ -971,14 +1030,20 @@ def processScenes(segment):
                     if curBand in bands_for_toa:
                         toaFinishedList.append(mosaicFileName)
 
-                    if curBand in bands_for_bt:
-                        btFinishedList.append(mosaicFileName)
-
                     if curBand in bands_for_sr:
                         srFinishedList.append(mosaicFileName)
 
+                    if curBand in bands_for_bt:
+                        btFinishedList.append(mosaicFileName)
+
                     if curBand in bands_for_pqa:
                         qaFinishedList.append(mosaicFileName)
+
+                    if curBand in bands_for_swater:
+                        swFinishedList.append(mosaicFileName)
+
+                    if curBand in bands_for_stemp:
+                        stFinishedList.append(mosaicFileName)
 
                     logger.info('    End processing for: {0}'.format(curBand))
 
@@ -1148,6 +1213,8 @@ def processScenes(segment):
                 btFinishedList.append(lineageFileName)
                 srFinishedList.append(lineageFileName)
                 qaFinishedList.append(lineageFileName)
+                swFinishedList.append(lineageFileName)
+                stFinishedList.append(lineageFileName)
 
                 logger.info('    End building lineage file')
 
@@ -1637,11 +1704,23 @@ def processScenes(segment):
                             continue
 
 
+                    if curBand in bands_for_toa:
+                        toaFinishedList.append(mosaicFileName)
+
                     if curBand in bands_for_sr:
                         srFinishedList.append(mosaicFileName)
 
+                    if curBand in bands_for_bt:
+                        btFinishedList.append(mosaicFileName)
+
                     if curBand in bands_for_pqa:
                         qaFinishedList.append(mosaicFileName)
+
+                    if curBand in bands_for_swater:
+                        swFinishedList.append(mosaicFileName)
+
+                    if curBand in bands_for_stemp:
+                        stFinishedList.append(mosaicFileName)
 
                     logger.info('    End processing for: {0}'.format(curBand))
 
@@ -1758,6 +1837,8 @@ def processScenes(segment):
                 btFinishedList.append(metaFileName)
                 srFinishedList.append(metaFileName)
                 qaFinishedList.append(metaFileName)
+                swFinishedList.append(metaFileName)
+                stFinishedList.append(metaFileName)
 
                 logger.info('    End metadata')
 
@@ -1837,6 +1918,38 @@ def processScenes(segment):
                     continue
 
                 make_file_group_writeable(qaFullName)
+
+                                                               # sw
+                swFullName = os.path.join(tgzOutputDir, tile_id + "_SW.tar")
+                try:
+                    tar = tarfile.open(swFullName, "w")
+                    for mName in swFinishedList:
+                        #print 'sr: ' + str(len(srFinishedList)) + ' ' + mName
+                        tar.add(os.path.join(tileDir, mName), arcname=mName)
+                    tar.close()
+                except:
+                    logger.error('Error: creating sw tarfile')
+                    logger.error('        Error: {0}'.format(traceback.format_exc()))
+                    tileErrorHasOccurred = True
+                    sceneState = "ERROR"
+                    continue
+                make_file_group_writeable(swFullName)
+
+                                                               # st
+                stFullName = os.path.join(tgzOutputDir, tile_id + "_ST.tar")
+                try:
+                    tar = tarfile.open(stFullName, "w")
+                    for mName in stFinishedList:
+                        #print 'sr: ' + str(len(srFinishedList)) + ' ' + mName
+                        tar.add(os.path.join(tileDir, mName), arcname=mName)
+                    tar.close()
+                except:
+                    logger.error('Error: creating st tarfile')
+                    logger.error('        Error: {0}'.format(traceback.format_exc()))
+                    tileErrorHasOccurred = True
+                    sceneState = "ERROR"
+                    continue
+                make_file_group_writeable(stFullName)
 
                 logger.info('    End zipping')
 
