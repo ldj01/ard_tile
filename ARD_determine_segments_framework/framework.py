@@ -1,5 +1,6 @@
 """ ARD Tile Scheduler Mesos framework interface """
 
+import os
 import sys
 import time
 import signal
@@ -290,10 +291,13 @@ def queue_segments(jobs, conf, connection):
 
                 # Build the Docker entrypoint command.
                 cmd = ['ARD_Clip_L457.py']
-                if segment[0]['LANDSAT_PRODUCT_ID'][:4] == 'LC08':
+                if segment[0]['SATELITE'] == 'LC08':
                     cmd = ['ARD_Clip_L8.py']
 
-                cmd.extend(['"' + str(segment) + '"', conf.outdir + "/lta_incoming"])
+                subdirdest = {'4': 'tm', '5': 'tm', '7': 'etm', '8': 'oli_tirs'}
+                final_output = os.path.join(conf.outdir, "lta_incoming",
+                                            subdirdest[segment[0]['SATELITE']], 'ARD_Tile')
+                cmd.extend(['"' + str(segment) + '"', final_output ])
 
                 # Compile the job information.
                 job = Job()
