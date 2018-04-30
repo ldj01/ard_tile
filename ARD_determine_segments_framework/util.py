@@ -30,7 +30,7 @@ class L2PGS_ExceptionFormatter(logging.Formatter):
         return s
 
 
-def setup_logging(level='INFO', stream='stdout'):
+def setup_logger(level='INFO', stream='stdout'):
     """ Initialize the message logging components. """
     global logger
 

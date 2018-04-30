@@ -5,7 +5,7 @@ from argparse import ArgumentParser
 
 import config
 import framework
-from util import setup_logging
+from util import setup_logger
 
 
 def parse_cli():
@@ -26,7 +26,7 @@ def parse_cli():
 
 
 if __name__ == '__main__':
-    setup_logging()
+    setup_logger()
     framework.run_forever(
         config.read_config(
             **parse_cli()))
