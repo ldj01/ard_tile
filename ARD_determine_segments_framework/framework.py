@@ -266,25 +266,48 @@ def format_job_id(segment):
             .format(WRS_ROW_H=segment[-1]['WRS_ROW'], **segment[0]))
 
 
-def fetch_segments(jobs, conf):
+def queue_segments(jobs, conf, connection):
     """ Make a new Mesos job for every segment """
     try:
+        segmentAboveThreshold = False
         for segment in determine_segments(**conf):
-            # Build the Docker entrypoint command.
-            cmd = ['ARD_Clip_L457.py']
-            if segment[0]['LANDSAT_PRODUCT_ID'][:4] == 'LC08':
-                cmd = ['ARD_Clip_L8.py']
+            completed_scene_list = []
+            segment_length = len(segment)
+            if segment_length >= conf.minscenesperseg:
+                segmentAboveThreshold = True
+                logger.info("Segment length: %d", len(segment))
+                logger.info("Segment: %s", segment)
+                for scene_record in segment:
+                    # Build list of scenes here to be used in SQL Insert statement
+                    row = (scene_record['LANDSAT_PRODUCT_ID'], scene_record['FILE_LOC'])
+                    completed_scene_list.append(row)
 
-            cmd.extend(['"' + str(segment) + '"', conf.outdir + "/lta_incoming"])
+                    # set 'BLANK' to 'INQUEUE' processing status
+                    db.set_scene_to_inqueue(connection, scene_record['LANDSAT_PRODUCT_ID'])
+                logger.info("Scenes inserted into ARD_PROCESSED_SCENES table: %s",
+                            completed_scene_list)
+                db.processed_scenes(connection, completed_scene_list)
 
-            # Compile the job information.
-            job = Job()
-            job.cpus = conf.cpus
-            job.disk = conf.disk
-            job.mem = conf.memory
-            job.command = ' '.join(cmd)
-            job.job_id = format_job_id(segment)
-            jobs.append(job)
+                # Build the Docker entrypoint command.
+                cmd = ['ARD_Clip_L457.py']
+                if segment[0]['LANDSAT_PRODUCT_ID'][:4] == 'LC08':
+                    cmd = ['ARD_Clip_L8.py']
+
+                cmd.extend(['"' + str(segment) + '"', conf.outdir + "/lta_incoming"])
+
+                # Compile the job information.
+                job = Job()
+                job.cpus = conf.cpus
+                job.disk = conf.disk
+                job.mem = conf.memory
+                job.command = ' '.join(cmd)
+                job.job_id = format_job_id(segment)
+                jobs.append(job)
+
+        if not segmentAboveThreshold:
+            logger.info("No segments found that meet the %d scenes per segment minimum",
+                        conf.minscenesperseg)
+
         return SUCCESS
 
     except:
@@ -354,7 +377,7 @@ def run_forever(conf):
             break
 
         # If the job queue is empty, get work.
-        if (not mesosScheduler.jobs and fetch_segments(mesosScheduler.jobs, conf) == ERROR):
+        if (not mesosScheduler.jobs and queue_segments(mesosScheduler.jobs, conf, connection) == ERROR):
             driver.stop(True)
             sys.exit(1)
 
@@ -368,7 +391,7 @@ def run_forever(conf):
                    mesosScheduler.tasksFinished == conf.max_jobs):
                 time.sleep(20)
             while not mesosScheduler.jobs:
-                if fetch_segments(mesosScheduler.jobs, conf) == ERROR:
+                if queue_segments(mesosScheduler.jobs, conf, connection) == ERROR:
                     driver.stop(True)
                     sys.exit(1)
                 time.sleep(20)

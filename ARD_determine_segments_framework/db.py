@@ -105,7 +105,7 @@ def duplicate_scenes_insert(connection, dup_scene_list):
         update_many(connection, dup_scenes_insert, dup_scene_list)
 
 
-def complete_processing(connection, completed_scene_list):
+def processed_scenes(connection, completed_scene_list):
     """ Insert processed segments with file location """
     processed_scenes_insert = ("insert /*+ ignore_row_on_dupkey_index(ARD_PROCESSED_SCENES, SCENE_ID_PK) */ "
                                "into ARD_PROCESSED_SCENES (scene_id,file_location) values (:1,:2)")
