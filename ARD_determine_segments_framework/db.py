@@ -41,8 +41,8 @@ def select(connection, sql, **opts):
         [{'ACQUIRED': datetime.datetime(1989, 7, 12, 0, 0)}]
     """
     cursor = connection.cursor()
-    logger.debug('Select SQL Statement: %s' % cursor.statement)
     cursor.execute(sql, opts)
+    logger.debug('Select SQL Statement: %s' % cursor.statement)
     columns = [i[0] for i in cursor.description]
     return [dict(zip(columns, row)) for row in cursor]
 
@@ -59,8 +59,8 @@ def update(connection, sql, **opts):
         None
     """
     cursor = connection.cursor()
-    logger.debug('Commit SQL Statement: %s' % cursor.statement)
     cursor.execute(sql, opts)
+    logger.debug('Commit SQL Statement: %s' % cursor.statement)
     connection.commit()
 
 
@@ -76,10 +76,10 @@ def update_many(connection, sql, array=None):
         None
     """
     cursor = connection.cursor()
-    logger.debug('Execute Many SQL Statement: %s' % cursor.statement)
     cursor.bindarraysize = len(array)
     cursor.prepare(sql)
     cursor.executemany(None, array)
+    logger.debug('Execute Many SQL Statement: %s' % cursor.statement)
     connection.commit()
 
 
