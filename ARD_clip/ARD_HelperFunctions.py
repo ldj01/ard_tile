@@ -341,41 +341,20 @@ def getTilesAndScenesLists(connection, landsatProdID, region, wrsPath, wrsRow, l
     southsouthPathRow = '_{0:03d}{1:03d}_'.format(wrsPath,southsouthRow)
 
 
-    if satellite == 'LC08':
-        minRowLimit = wrsRow - 2
-        maxRowLimit = wrsRow + 2
+    minRowLimit = wrsRow - 2
+    maxRowLimit = wrsRow + 2
 
-        ls_prod_id_sql = "select distinct LANDSAT_SCENE_ID from \
-                          inventory.LMD_SCENE where \
-                          trunc(DATE_ACQUIRED) = to_date(:1,'YYYY-MM-DD') \
-                          and LANDSAT_PRODUCT_ID is not null \
-                          and WRS_ROW >= :2 and WRS_ROW <= :3 \
-                          and WRS_PATH = :4"
-        ls_prod_id_tuple = (acqdate,minRowLimit,maxRowLimit,wrsPath)
-        ls_prod_id_cursor = connection.cursor()
-        ls_prod_id_cursor.execute(ls_prod_id_sql, ls_prod_id_tuple)
-        ls_prod_id_scenes = ls_prod_id_cursor.fetchall()
-        ls_prod_id_cursor.close()
-    else:
-        if satellite == 'LE07':
-            table = 'll0arcb.etm_scene_inventory@inv_l2_bridge_link'
-        else:
-            table = 'll0arcb.tm_scene_inventory@inv_l2_bridge_link'
-
-        minRowLimit = wrsRow - 2
-        maxRowLimit = wrsRow + 2
-
-        ls_prod_id_sql = "select distinct LANDSAT_SCENE_ID from " + \
-                          table + " where \
-                          trunc(DATE_ACQUIRED) = to_date(:1,'YYYY-MM-DD') \
-                          and LANDSAT_PRODUCT_ID is not null \
-                          and WRS_ROW >= :2 and WRS_ROW <= :3 \
-                          and WRS_PATH = :4"
-        ls_prod_id_tuple = (acqdate,minRowLimit,maxRowLimit,wrsPath)
-        ls_prod_id_cursor = connection.cursor()
-        ls_prod_id_cursor.execute(ls_prod_id_sql, ls_prod_id_tuple)
-        ls_prod_id_scenes = ls_prod_id_cursor.fetchall()
-        ls_prod_id_cursor.close()
+    ls_prod_id_sql = "select distinct LANDSAT_SCENE_ID from \
+                        inventory.LMD_SCENE where \
+                        trunc(DATE_ACQUIRED) = to_date(:1,'YYYY-MM-DD') \
+                        and LANDSAT_PRODUCT_ID is not null \
+                        and WRS_ROW >= :2 and WRS_ROW <= :3 \
+                        and WRS_PATH = :4"
+    ls_prod_id_tuple = (acqdate,minRowLimit,maxRowLimit,wrsPath)
+    ls_prod_id_cursor = connection.cursor()
+    ls_prod_id_cursor.execute(ls_prod_id_sql, ls_prod_id_tuple)
+    ls_prod_id_scenes = ls_prod_id_cursor.fetchall()
+    ls_prod_id_cursor.close()
 
 
 
