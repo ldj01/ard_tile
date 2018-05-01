@@ -1,0 +1,300 @@
+
+LE07: &l457
+  rename:
+    toa_band1: TAB1
+    toa_band2: TAB2
+    toa_band3: TAB3
+    toa_band4: TAB4
+    toa_band5: TAB5
+    toa_band7: TAB7
+    solar_azimuth_band4: SOA4
+    solar_zenith_band4: SOZ4
+    sensor_azimuth_band4: SEA4
+    sensor_zenith_band4: SEZ4
+    bt_band6: BTB6
+    sr_band1: SRB1
+    sr_band2: SRB2
+    sr_band3: SRB3
+    sr_band4: SRB4
+    sr_band5: SRB5
+    sr_band7: SRB7
+    pixel_qa: PIXELQA
+    radsat_qa: RADSATQA
+    sr_atmos_opacity: SRATMOSOPACITYQA
+    sr_cloud_qa: SRCLOUDQA
+    dswe_diag: DIAG
+    dswe_intrpd: INTR
+    dswe_mask: MASK
+    dswe_pshsccss: INWM
+    percent_slope: SLOPE
+    hillshade: SHADE
+    st_downwelled_radiance: DRAD
+    st_upwelled_radiance: URAD
+    st_thermal_radiance: TRAD
+    st_atmospheric_transmittance: ATRAN
+    emis: EMIS
+    emis_stdev: EMSD
+    st_cloud_distance: CDIST
+    st_qa: STQA
+    surface_temperature: ST
+
+  types:
+    # NoData value = -9999
+    1:
+      - toa_band1
+      - toa_band2
+      - toa_band3
+      - toa_band4
+      - toa_band5
+      - toa_band7
+      - sr_band1
+      - sr_band2
+      - sr_band3
+      - sr_band4
+      - sr_band5
+      - sr_band7
+      - bt_band6
+      - sr_atmos_opacity
+      - dswe_diag
+      - percent_slope
+      - surface_temperature
+      - st_downwelled_radiance
+      - st_upwelled_radiance
+      - st_thermal_radiance
+      - st_atmospheric_transmittance
+      - st_cloud_distance
+      - emis
+      - emis_stdev
+      - st_qa
+    # NoData value = -32768
+    2:
+      - solar_azimuth_band4
+      - solar_zenith_band4
+      - sensor_azimuth_band4
+      - sensor_zenith_band4
+    # NoData value = 255
+    4:
+      - radsat_qa
+      - pixel_qa
+      - dswe_intrpd
+      - dswe_mask
+      - dswe_pshsccss
+      - hillshade
+    # NoData value uses LINEAGE
+    5:
+      - sr_cloud_qa
+
+  package:
+    TOA:
+      - toa_band1
+      - toa_band2
+      - toa_band3
+      - toa_band4
+      - toa_band5
+      - toa_band7
+      - solar_azimuth_band4
+      - solar_zenith_band4
+      - sensor_azimuth_band4
+      - sensor_zenith_band4
+      - radsat_qa
+      - pixel_qa
+    BT:
+      - bt_band6
+      - radsat_qa
+      - pixel_qa
+    SR:
+      - sr_band1
+      - sr_band2
+      - sr_band3
+      - sr_band4
+      - sr_band5
+      - sr_band7
+      - sr_atmos_opacity
+      - sr_cloud_qa
+      - radsat_qa
+      - pixel_qa
+    PQA:
+      - sr_atmos_opacity
+      - sr_cloud_qa
+      - radsat_qa
+      - pixel_qa
+      - st_qa
+    _browse:
+      - toa_band3
+      - toa_band4
+      - toa_band5
+    SW:
+      - dswe_mask
+      - dswe_diag
+      - dswe_intrpd
+      - dswe_pshsccss
+      - percent_slope
+      - hillshade
+      - pixel_qa
+    ST:
+      - surface_temperature
+      - st_downwelled_radiance
+      - st_upwelled_radiance
+      - st_thermal_radiance
+      - emis
+      - emis_stdev
+      - st_cloud_distance
+      - st_atmospheric_transmittance
+      - st_qa
+      - pixel_qa
+
+LT05:
+  <<: *l457
+
+LT04:
+  <<: *l457
+
+LC08:
+  rename:
+    toa_band1: TAB1
+    toa_band2: TAB2
+    toa_band3: TAB3
+    toa_band4: TAB4
+    toa_band5: TAB5
+    toa_band6: TAB6
+    toa_band7: TAB7
+    toa_band9: TAB9
+    solar_azimuth_band4: SOA4
+    solar_zenith_band4: SOZ4
+    sensor_azimuth_band4: SEA4
+    sensor_zenith_band4: SEZ4
+    bt_band10: BTB10
+    bt_band11: BTB11
+    sr_band1: SRB1
+    sr_band2: SRB2
+    sr_band3: SRB3
+    sr_band4: SRB4
+    sr_band5: SRB5
+    sr_band6: SRB6
+    sr_band7: SRB7
+    pixel_qa: PIXELQA
+    radsat_qa: RADSATQA
+    sr_aerosol: SRAEROSOLQA
+    dswe_diag: DIAG
+    dswe_intrpd: INTR
+    dswe_mask: MASK
+    dswe_pshsccss: INWM
+    percent_slope: SLOPE
+    hillshade: SHADE
+    st_downwelled_radiance: DRAD
+    st_upwelled_radiance: URAD
+    st_thermal_radiance: TRAD
+    st_atmospheric_transmittance: ATRAN
+    emis: EMIS
+    emis_stdev: EMSD
+    st_cloud_distance: CDIST
+    st_qa: STQA
+    surface_temperature: ST
+
+  types:
+    # NoData value = -9999
+    1:
+      - toa_band1
+      - toa_band2
+      - toa_band3
+      - toa_band4
+      - toa_band5
+      - toa_band6
+      - toa_band7
+      - toa_band9
+      - sr_band1
+      - sr_band2
+      - sr_band3
+      - sr_band4
+      - sr_band5
+      - sr_band6
+      - sr_band7
+      - bt_band10
+      - bt_band11
+      - dswe_diag
+      - percent_slope
+      - surface_temperature
+      - st_downwelled_radiance
+      - st_upwelled_radiance
+      - st_thermal_radiance
+      - st_atmospheric_transmittance
+      - st_cloud_distance
+      - emis
+      - emis_stdev
+      - st_qa
+    # NoData value = -32768
+    2:
+      - solar_azimuth_band4
+      - solar_zenith_band4
+      - sensor_azimuth_band4
+      - sensor_zenith_band4
+    # NoData value = 255
+    4:
+      - radsat_qa
+      - pixel_qa
+      - sr_aerosol
+      - dswe_intrpd
+      - dswe_mask
+      - dswe_pshsccss
+      - hillshade
+
+  package:
+    TOA:
+      - radsat_qa
+      - pixel_qa
+      - solar_azimuth_band4
+      - solar_zenith_band4
+      - sensor_azimuth_band4
+      - sensor_zenith_band4
+      - toa_band1
+      - toa_band2
+      - toa_band3
+      - toa_band4
+      - toa_band5
+      - toa_band6
+      - toa_band7
+      - toa_band9
+    BT:
+      - bt_band10
+      - bt_band11
+      - radsat_qa
+      - pixel_qa
+    SR:
+      - sr_band1
+      - sr_band2
+      - sr_band3
+      - sr_band4
+      - sr_band5
+      - sr_band6
+      - sr_band7
+      - radsat_qa
+      - pixel_qa
+      - sr_aerosol
+    PQA:
+      - radsat_qa
+      - pixel_qa
+      - sr_aerosol
+      - st_qa
+    _browse:
+      - toa_band4
+      - toa_band5
+      - toa_band6
+    SW:
+      - dswe_mask
+      - dswe_diag
+      - dswe_intrpd
+      - dswe_pshsccss
+      - percent_slope
+      - hillshade
+      - pixel_qa
+    ST:
+      - surface_temperature
+      - st_downwelled_radiance
+      - st_upwelled_radiance
+      - st_thermal_radiance
+      - emis
+      - emis_stdev
+      - st_cloud_distance
+      - st_atmospheric_transmittance
+      - st_qa
+      - pixel_qa
