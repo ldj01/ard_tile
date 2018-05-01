@@ -20,21 +20,9 @@ import landsat
 from util import logger
 
 
-# ----------------------------------------------------------------------------------------------
-#
-#   Purpose:  Create a string containing the current UTC date/time
-#
-def getProductionDateTime():
-
-    prodTime =  str(datetime.datetime.utcnow())
-    prodTime = prodTime.replace(' ', 'T')
-    dotPos = prodTime.find('.')
-    if (dotPos <= 0):
-        prodTime = prodTime + 'Z'
-    else:
-        prodTime = prodTime[:dotPos] + 'Z'
-
-    return prodTime
+def get_production_timestamp():
+    """ Create a string containing the current UTC date/time in ISO 8601 format """
+    return datetime.datetime.utcnow().strftime(r'%Y-%m-%dT%H:%M:%SZ')
 
 
 # ----------------------------------------------------------------------------------------------
