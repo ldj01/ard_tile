@@ -3,6 +3,7 @@
 import os
 import sys
 import time
+import json
 import signal
 from threading import Thread
 
@@ -297,7 +298,7 @@ def queue_segments(jobs, conf, connection):
                 subdirdest = {'4': 'tm', '5': 'tm', '7': 'etm', '8': 'oli_tirs'}
                 final_output = os.path.join(conf.outdir, "lta_incoming",
                                             subdirdest[segment[0]['SATELITE']], 'ARD_Tile')
-                cmd.extend(['"' + str(segment) + '"', final_output ])
+                cmd.extend(['"' + json.dumps(segment) + '"', final_output ])
 
                 # Compile the job information.
                 job = Job()
