@@ -10,13 +10,14 @@ import datetime
 import os
 import logging
 import sys
+import urllib2
+
 from osgeo import gdal, osr, ogr
 import numpy as np
-import ConfigParser
-import ast
-import urllib2
-import stat
-import cx_Oracle
+
+import db
+import landsat
+from util import logger
 
 
 # ----------------------------------------------------------------------------------------------
@@ -208,57 +209,6 @@ def parseSceneHistFile(sceneFilename):
     else:
         return 0, scenePixelCountArray
 
-# ----------------------------------------------------------------------------------------------
-#
-# Message logging filter
-class L2PGS_LoggingFilter(logging.Filter):
-    def filter(self, record):
-        record.subsystem = 'ARDTile'
-
-        return True
-
-# ----------------------------------------------------------------------------------------------
-#
-# Exception formatter
-class L2PGS_ExceptionFormatter(logging.Formatter):
-    def formatException(self, exc_info):
-        result = super(L2PGS_ExceptionFormatter, self).formatException(exc_info)
-        return repr(result)
-
-    def format(self, record):
-        s = super(L2PGS_ExceptionFormatter, self).format(record)
-        if record.exc_text:
-            s = s.replace('\n', ' ')
-            s = s.replace('\\n', ' ')
-        return s
-
-# ----------------------------------------------------------------------------------------------
-#
-# Initialize the message logging components.
-def setup_logging():
-
-
-    # Setup the logging level
-    logging_level = logging.INFO
-
-    handler = logging.StreamHandler(sys.stdout)
-    formatter = L2PGS_ExceptionFormatter(fmt=('%(asctime)s.%(msecs)03d'
-                                              ' %(subsystem)s'
-                                              ' %(levelname)-8s'
-                                              ' %(message)s'),
-                                         datefmt='%Y-%m-%dT%H:%M:%S')
-
-    handler.setFormatter(formatter)
-    handler.addFilter(L2PGS_LoggingFilter())
-
-    logger = logging.getLogger()
-    logger.setLevel(logging_level)
-    logger.addHandler(handler)
-
-    logging.getLogger('requests').setLevel(logging.WARNING)
-
-    return logger
-
 # ==========================================================================
 
 # ----------------------------------------------------------------------------------------------
@@ -306,389 +256,115 @@ def raster_value_count(raster_in, landsat_8=False):
                 countCloud)
 
 
+def get_tile_scene_intersections(connection, product_id, region, n=2):
+    """ Find the Tile IDs intersecting with product_id, and neighboring same-day consecutive acqs
 
-# -----------------------------------------------------------------------------
-#
-#   Purpose:  This function finds all the tile ids that intersect the input
-#             landsat product id.  It also creates a dictionary of tile ids
-#             that contain all the required path/rows that contribute to that
-#             tile.
-#   Inputs:   db connection, landsatProdID, region, wrsPath
-#   Example input:  db_connector
-#                   'LC08_L2TP_032028_20130802_20170309_01_A1'
-#                   'CU'
-#                   32
-#                   18
-#   Returns:  a list of tiles, a dictionary of tiles containing lists of path/rows.
-#   Example output:
-#     [('002', '002'), ('003', '002'), ('004', '002')]
-#     {'004002063': [('063', '046'), ('063', '047')],
-#      '002002063': [('063', '046'), ('063', '047')],
-#      '003002063': [('063', '046'), ('063', '047')]}
-#
-def getTilesAndScenesLists(connection, landsatProdID, region, wrsPath, wrsRow, logger, acqdate, satellite):
+    Args:
+        connection (cx_Oracle.Connection): open database connection
+        product_id (str): landsat collection product id
+        region (str): tile grid region following shapefile naming convention
+        n (int): consecutive rows to intersect with
+
+    Returns:
+        list: all the tile ids that intersect the input landsat product id
+        dict: tile ids that contain all the required path/rows that contribute to that tile
+
+    Example:
+        >>> get_tile_scene_intersections(db, 'LT04_L2TP_035027_19890712_20161110_01_A1', 'CU', n=2)
+        ([{'H': 11,
+           'V': 3,
+           'LL_Y': 2714805,
+           'LR_X': -765585,
+           'UL_X': -915585,
+           'UR_Y': 2864805}, ...],
+        { 'H011V004P035': [{'acqdate': '19890712',
+            'mission': 'LT04',
+            'procdate': '20161110',
+            'wrspath': '035',
+            'wrsrow': '027'}, ...], ...})
+    """
 
     # We need to get 2 consecutive wrsRows north and 2 consecutive wrsRows south
     # of input scene to account for possible 3 scene tile.
-    northRow = wrsRow - 1
-    northnorthRow = wrsRow - 2
-    southRow = wrsRow + 1
-    southsouthRow = wrsRow + 2
-
-    northPathRow = '_{0:03d}{1:03d}_'.format(wrsPath,northRow)
-    northnorthPathRow = '_{0:03d}{1:03d}_'.format(wrsPath,northnorthRow)
-    southPathRow = '_{0:03d}{1:03d}_'.format(wrsPath,southRow)
-    southsouthPathRow = '_{0:03d}{1:03d}_'.format(wrsPath,southsouthRow)
-
-
-    minRowLimit = wrsRow - 2
-    maxRowLimit = wrsRow + 2
-
-    ls_prod_id_sql = "select distinct LANDSAT_SCENE_ID from \
-                        inventory.LMD_SCENE where \
-                        trunc(DATE_ACQUIRED) = to_date(:1,'YYYY-MM-DD') \
-                        and LANDSAT_PRODUCT_ID is not null \
-                        and WRS_ROW >= :2 and WRS_ROW <= :3 \
-                        and WRS_PATH = :4"
-    ls_prod_id_tuple = (acqdate,minRowLimit,maxRowLimit,wrsPath)
-    ls_prod_id_cursor = connection.cursor()
-    ls_prod_id_cursor.execute(ls_prod_id_sql, ls_prod_id_tuple)
-    ls_prod_id_scenes = ls_prod_id_cursor.fetchall()
-    ls_prod_id_cursor.close()
-
-
+    id_info = landsat.match(product_id)
+    ls_prod_id_scenes = db.select_consecutive_scene(connection, n=n, **id_info)
+    pathrow_range_list = ['_{0:3s}{1:03d}_'.format(id_info['wrspath'], int(id_info['wrsrow']) + wrs_row_x)
+                          for wrs_row_x in range(-n, n+1)]
 
     tile_list = []
-    scenesForTilePathLU = {}
+    tilepath_scenes = {}
 
-    scene_list = ()
-    loop_ctr = 1
-    where_clause = ''
     if len(ls_prod_id_scenes) > 0:
-        for record in ls_prod_id_scenes:
-
-            if loop_ctr == 1:
-                where_clause += ' LANDSAT_SCENE_ID = :' + str(loop_ctr)
-            else:
-                where_clause += ' OR LANDSAT_SCENE_ID = :' + str(loop_ctr)
-
-            scene_list = scene_list + (record[0],)
-
-            loop_ctr = loop_ctr + 1
-
-
         # Get coordinates for input scene and north and south scene.
-        SQL="select LANDSAT_PRODUCT_ID, \
-             'POLYGON ((' ||  CORNER_UL_LON || ' ' || CORNER_UL_LAT || ',' || \
-             CORNER_LL_LON || ' ' || CORNER_LL_LAT || ',' || \
-             CORNER_LR_LON || ' ' || CORNER_LR_LAT || ',' || \
-             CORNER_UR_LON || ' ' || CORNER_UR_LAT || ',' || \
-             CORNER_UL_LON || ' ' || CORNER_UL_LAT || '))' \
-             from SCENE_COORDINATE_MASTER_V where " + where_clause + \
-             " order by LANDSAT_PRODUCT_ID desc"
-
-        select_cursor = connection.cursor()
-        select_cursor.execute(SQL, scene_list)
-        scene_records = select_cursor.fetchall()
-        select_cursor.close()
-
-        logger.info('Coordinate query response: {0}'.format(scene_records))
-
-        input_scene_coords = ""
-        north_scene_coords = ""
-        north_north_scene_coords = ""
-        south_scene_coords = ""
-        south_south_scene_coords = ""
-        if len(scene_records) > 0:
-            for record in scene_records:
-                if record[0] == landsatProdID:
-                    input_scene_coords = record[1]
-                if northPathRow in record[0]:
-                    north_scene_coords = record[1]
-                if northnorthPathRow in record[0]:
-                    north_north_scene_coords = record[1]
-                if southPathRow in record[0]:
-                    south_scene_coords = record[1]
-                if southsouthPathRow in record[0]:
-                    south_south_scene_coords = record[1]
+        results = db.select_corner_polys(connection, ls_prod_id_scenes)
+        scene_records = [r for r in results
+                         if any(x in r['LANDSAT_PRODUCT_ID'] for x in pathrow_range_list)]
+        logger.info('Coordinate query response: %s', scene_records)
 
         # Create geometry objects for each scenes coordinates
-        if input_scene_coords != "":
-            input_scene_geometry = ogr.CreateGeometryFromWkt(input_scene_coords)
-        if north_scene_coords != "":
-            north_scene_geometry = ogr.CreateGeometryFromWkt(north_scene_coords)
-        if north_north_scene_coords != "":
-            north_north_scene_geometry = ogr.CreateGeometryFromWkt(north_north_scene_coords)
-        if south_scene_coords != "":
-            south_scene_geometry = ogr.CreateGeometryFromWkt(south_scene_coords)
-        if south_south_scene_coords != "":
-            south_south_scene_geometry = ogr.CreateGeometryFromWkt(south_south_scene_coords)
+        scene_records = {r['LANDSAT_PRODUCT_ID']: ogr.CreateGeometryFromWkt(r['COORDS'])
+                         for r in scene_records}
 
         # Find all the tiles that intersect the input scene
         # and put into a list
 
-        if 'ARD_AUX_DIR' in os.environ:
-            aux_path = os.getenv('ARD_AUX_DIR')
-            daShapefile = aux_path + "/shapefiles/" + region + "_ARD_tiles_geographic.shp"
-            driver = ogr.GetDriverByName('ESRI Shapefile')
-            dataSource = driver.Open(daShapefile, 0) # 0 means read-only. 1 means writeable.
-        else:
-            logger.error('ARD_AUX_DIR environment variable not set')
-            raise KeyError('ARD_AUX_DIR environment variable not set')
+        region_shapefile = read_shapefile(region=region)
 
+        layer = region_shapefile.GetLayer()
+        spatialRef = layer.GetSpatialRef()
+        for name in scene_records.keys():
+            scene_records[name].AssignSpatialReference(spatialRef)
+            logger.debug('???>>> %s ||', name)
 
-        # Check to see if shapefile is found.
-        if dataSource is None:
-            logger.info('Could not open {0}'.format(daShapefile))
-        else:
-            layer = dataSource.GetLayer()
-            spatialRef = layer.GetSpatialRef()
-            input_scene_geometry.AssignSpatialReference(spatialRef)
-            if north_scene_coords != "":
-                north_scene_geometry.AssignSpatialReference(spatialRef)
-            if north_north_scene_coords != "":
-                north_north_scene_geometry.AssignSpatialReference(spatialRef)
-            if south_scene_coords != "":
-                south_scene_geometry.AssignSpatialReference(spatialRef)
-            if south_south_scene_coords != "":
-                south_south_scene_geometry.AssignSpatialReference(spatialRef)
+        for feature2 in layer:
+            geom2 = feature2.GetGeometryRef()
 
-            for feature2 in layer:
-                geom2 = feature2.GetGeometryRef()
-                H_attr = feature2.GetField('H')
-                V_attr = feature2.GetField('V')
-                leftX_attr = feature2.GetField('UL_X')
-                bottomY_attr = feature2.GetField('LL_Y')
-                rightX_attr = feature2.GetField('LR_X')
-                topY_attr = feature2.GetField('UR_Y')
+            # select only the intersections
+            if geom2.Intersects(scene_records[product_id]):
+                tile = {
+                    'H':    feature2.GetField('H'),
+                    'V':    feature2.GetField('V'),
+                    'UL_X': feature2.GetField('UL_X'),
+                    'LL_Y': feature2.GetField('LL_Y'),
+                    'LR_X': feature2.GetField('LR_X'),
+                    'UR_Y': feature2.GetField('UR_Y'),
+                }
+                tile_list.append(tile)
 
-                # select only the intersections
-                if geom2.Intersects(input_scene_geometry):
-
-                    # put intersected tiles into a list
-                    H_formatted = '{0:03d}'.format(H_attr)
-                    V_formatted = '{0:03d}'.format(V_attr)
-                    tile_tuple = H_formatted, V_formatted
-                    tile_tuple2 = leftX_attr, bottomY_attr, rightX_attr, topY_attr
-                    final_tuple = tile_tuple, tile_tuple2
-                    tile_list.append(final_tuple)
-
+                for name in scene_records.keys():
                     # Add path, row of input scene to dictionary
-                    key = "{0:03d}{1:03d}{2:03d}".format(H_attr, V_attr, wrsPath)
-                    path_formatted = '{0:03d}'.format(wrsPath)
-                    row_formatted = '{0:03d}'.format(wrsRow)
-                    tuple = path_formatted, row_formatted
-                    my_list = []
-                    my_list.append(tuple)
-                    scenesForTilePathLU[key] = my_list
-
+                    key = ''.join([
+                        'H%03d' % tile['H'],
+                        'V%03d' % tile['V'],
+                        'P', id_info['wrspath']
+                    ])
                     # Now see if tile intersects with north and south scene
                     # and put into a dictionary
-                    if north_scene_coords != "":
-                        if geom2.Intersects(north_scene_geometry):
+                    if geom2.Intersects(scene_records[name]):
+                        if key not in tilepath_scenes:
+                            tilepath_scenes[key] = list()
 
-                            row_formatted = '{0:03d}'.format(northRow)
-                            tuple = path_formatted, row_formatted
-                            tuple_already_exists = False
-                            my_list = scenesForTilePathLU[key]
-                            for tuple1 in my_list:
-                                if tuple1 == tuple:
-                                    tuple_already_exists = True
-                            if not tuple_already_exists:
-                                my_list.append(tuple)
-                    if north_north_scene_coords != "":
-                        if geom2.Intersects(north_north_scene_geometry):
-
-                            row_formatted = '{0:03d}'.format(northnorthRow)
-                            tuple = path_formatted, row_formatted
-                            tuple_already_exists = False
-                            my_list = scenesForTilePathLU[key]
-                            for tuple1 in my_list:
-                                if tuple1 == tuple:
-                                    tuple_already_exists = True
-                            if not tuple_already_exists:
-                                my_list.append(tuple)
-                    if south_scene_coords != "":
-                        if geom2.Intersects(south_scene_geometry):
-
-                            row_formatted = '{0:03d}'.format(southRow)
-                            tuple = path_formatted, row_formatted
-                            tuple_already_exists = False
-                            my_list = scenesForTilePathLU[key]
-                            for tuple1 in my_list:
-                                if tuple1 == tuple:
-                                    tuple_already_exists = True
-                            if not tuple_already_exists:
-                                my_list.append(tuple)
-                    if south_south_scene_coords != "":
-                        if geom2.Intersects(south_south_scene_geometry):
-
-                            row_formatted = '{0:03d}'.format(southsouthRow)
-                            tuple = path_formatted, row_formatted
-                            tuple_already_exists = False
-                            my_list = scenesForTilePathLU[key]
-                            for tuple1 in my_list:
-                                if tuple1 == tuple:
-                                    tuple_already_exists = True
-                            if not tuple_already_exists:
-                                my_list.append(tuple)
-        dataSource = None
+                        tilepath_scenes[key].append(landsat.match(product_id))
 
     logger.info('Tile list: {0}'.format(tile_list))
-    logger.info('scenesForTilePathLU: {0}'.format(scenesForTilePathLU))
+    logger.info('Neighboring scenes: {0}'.format(tilepath_scenes))
 
-    return tile_list, scenesForTilePathLU
-
-# ----------------------------------------------------------------------------------------------
-#
-#   Purpose:  Command line argument parsing
-#
-def readCmdLn(argv, logger):
-    logger.info('argv count: {0}'.format(len(argv)))
-    logger.info('argv : {0}'.format(argv))
-
-    if len(argv) != 3:
-       logger.info("need one command line argument")
-       logger.info("example:  ARD_Clip.py '[('2013-07-09',40,29,")
-       logger.info("                          '/hsm/lsat1/IT/collection01/etm/A1_L2/2012/33/36/LE07_L1TP_033036_20121220_20160909_01_A1.tar.gz',")
-       logger.info("                          'LE07_L1TP_033036_20121220_20160909_01_A1'),")
-       logger.info("                        ('2013-07-09',40,30,")
-       logger.info("                          '/hsm/lsat1/IT/collection01/etm/A1_L2/2012/37/37/LE07_L1TP_037037_20121216_20160909_01_A1.tar.gz',")
-       logger.info("                          'LE07_L1TP_037037_20121216_20160909_01_A1')]")
-       logger.info("                        /hsm/lsat1/ST/collection01/lta_incoming")
-       exit (0)
-
-    try:
-       segment = ast.literal_eval(argv[1])
-       output_path = argv[2]
-       return (segment, output_path)
-    except Exception as e:
-       logger.error('        Error: {0}'.format(e))
-       sys.exit(0)
+    return tile_list, tilepath_scenes
 
 
-# ----------------------------------------------------------------------------------------------
-#
-#   Purpose:  Reads values from config file
-#
-def readConfig(logger):
+def read_shapefile(region='', ard_aux_dir=None):
+    if (ard_aux_dir is None) and ('ARD_AUX_DIR' not in os.environ):
+        logger.error('ARD_AUX_DIR environment variable not set')
+        raise KeyError('ARD_AUX_DIR environment variable not set')
+    elif (ard_aux_dir is None):
+        ard_aux_dir = os.path.join(os.getenv('ARD_AUX_DIR'), "shapefiles")
 
-    logger.debug("readConfig")
-    Config = ConfigParser.ConfigParser()
-    if len(Config.read("ARD_Clip.conf")) > 0:
-        logger.debug("Found ARD_Clip.conf")
-        section = 'SectionOne'
-        if Config.has_section(section):
-           if Config.has_option(section, 'dbconnect'):
-              connstr = Config.get(section, 'dbconnect')
-           if Config.has_option(section, 'version'):
-              version = Config.get(section, 'version')
-              logger.info("version: {0}".format(version))
-           if Config.has_option(section, 'soap_envelope_template'):
-              soap_envelope = Config.get(section, 'soap_envelope_template')
-           if Config.has_option(section, 'debug'):
-              debug = Config.getboolean(section, 'debug')
-    return connstr, version, soap_envelope, debug
+    region_shp_filename = os.path.join(ard_aux_dir, region + "_ARD_tiles_geographic.shp")
+    driver = ogr.GetDriverByName('ESRI Shapefile')
+    logger.debug('Open shapefile %s', region_shp_filename)
+    region_shapefile = driver.Open(region_shp_filename, 0) # 0 means read-only. 1 means writeable.
 
-# ----------------------------------------------------------------------------------------------
-#
-#   Purpose:  Request required L2 scene bundles be moved to fastest cache
-#                     available.
-#
-def stageFiles(segment,soap_envelope, logger):
-    try:
-       logger.info('Start staging...')
-       url="https://dds.cr.usgs.gov/HSMServices/HSMServices?wsdl"
-       headers = {'content-type': 'text/xml'}
-
-       files = ''
-       for scene_record in segment:
-           files = files + '<files>' + scene_record[3] + '</files>'
-       soap_envelope = soap_envelope.replace("#################", files)
-
-       logger.debug('SOAP Envelope: {0}'.format(soap_envelope))
-       request_object = urllib2.Request(url, soap_envelope, headers)
-
-       response = urllib2.urlopen(request_object)
-
-       html_string = response.read()
-       logger.info('Stage response: {0}'.format(html_string))
-    except Exception as e:
-       logger.warning('Error staging files: {0}.  Continue anyway.'.format(e))
-
-    else:
-       logger.info('Staging succeeded...')
-
-
-# ----------------------------------------------------------------------------------------------
-#
-#   Purpose:  Insert a tile record into the ARD_COMPLETED_TILES table
-#
-#
-def insert_tile_record(connection, completed_tile_list, logger):
-
-    try:
-        logger.info('Insert tile into ARD_COMPLETED_TILES table: {0}'.format(completed_tile_list))
-        insert_cursor = connection.cursor()
-        processed_tiles_insert = "insert /*+ ignore_row_on_dupkey_index(ARD_COMPLETED_TILES, TILE_ID_PK) */ into ARD_COMPLETED_TILES (tile_id,CONTRIBUTING_SCENES,COMPLETE_TILE,PROCESSING_STATE) values (:1,:2,:3,:4)"
-        insert_cursor.bindarraysize = len(completed_tile_list)
-        insert_cursor.prepare(processed_tiles_insert)
-        insert_cursor.executemany(None, completed_tile_list)
-        connection.commit()
-    except:
-        logger.error("insert_tile_record:  ERROR inserting into ARD_COMPLETED_TILES table")
-        raise
-
-    finally:
-        insert_cursor.close()
-
-# ----------------------------------------------------------------------------------------------
-#
-#   Purpose:  Make file group wrietable
-#
-#
-def make_file_group_writeable(filename):
-    st = os.stat(filename)
-    os.chmod(filename, st.st_mode | stat.S_IWGRP)
-
-# ----------------------------------------------------------------------------------------------
-#
-#   Purpose:  Update the state of a scene record in the ARD_PROCESSED_SCENES
-#             table
-#
-#
-def update_scene_record(connection, scene_id, state, logger):
-
-    try:
-        logger.info('Update state in ARD_PROCESSED_SCENES table')
-        logger.info('Scene ID: {0} State: {1}'.format(scene_id, state))
-        update_cursor = connection.cursor()
-        ard_processed_scenes_update = "update ARD_PROCESSED_SCENES set PROCESSING_STATE = :1, DATE_PROCESSED = sysdate where scene_id = :2"
-        update_cursor.execute(ard_processed_scenes_update, (state, scene_id))
-        connection.commit()
-    except:
-        logger.error("update_scene_record:  ERROR updating ARD_PROCESSED_SCENES table")
-        raise
-
-    finally:
-        update_cursor.close()
-
-# ----------------------------------------------------------------------------------------------
-#
-#   Purpose:  Connect to the database
-#
-#
-def db_connect(connstr, logger):
-    try:
-        return cx_Oracle.connect(connstr)
-    except:
-        logger.error("Error:  Unable to connect to the database.")
-        sys.exit(1)
-
-# ----------------------------------------------------------------------------------------------
-#
-#   Purpose:  Disconnect from the database
-#
-#
-def db_disconnect(connection):
-    connection.close()
+    if region_shapefile is None:
+        logger.error('Could not open {0}'.format(region_shp_filename))
+        raise IOError('Could not open {0}'.format(region_shp_filename))
+    return region_shapefile
