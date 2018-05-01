@@ -8,7 +8,6 @@ from itertools import groupby
 from util import logger
 import config
 import db
-import framework
 
 
 def same_day_paths(reform_list):
