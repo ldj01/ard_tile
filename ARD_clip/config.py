@@ -82,7 +82,7 @@ def read_processing_config(sensor, filename=None):
         dict: options subset by specified sensor
     """
     if filename is None:
-        filename = os.path.abspath('ARD_Clip.yaml')
+        filename = os.getenv('ARD_YAML_PATH')
     if not os.path.exists(filename):
         raise IOError("Cannot open processing configuration %s" % filename)
     conf = yaml.load(open(filename))
