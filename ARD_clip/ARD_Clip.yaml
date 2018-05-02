@@ -38,7 +38,7 @@ LE07: &l457
     st_qa: STQA
     surface_temperature: ST
 
-  types:
+  datatype:
     # NoData value = -9999
     1:
       - toa_band1
@@ -85,63 +85,64 @@ LE07: &l457
       - sr_cloud_qa
 
   package:
-    TOA:
-      - toa_band1
-      - toa_band2
-      - toa_band3
-      - toa_band4
-      - toa_band5
-      - toa_band7
-      - solar_azimuth_band4
-      - solar_zenith_band4
-      - sensor_azimuth_band4
-      - sensor_zenith_band4
-      - radsat_qa
-      - pixel_qa
+    TA:
+      - TAB1
+      - TAB2
+      - TAB3
+      - TAB4
+      - TAB5
+      - TAB7
+      - SOA4
+      - SOZ4
+      - SEA4
+      - SEZ4
+      - RADSATQA
+      - PIXELQA
     BT:
-      - bt_band6
-      - radsat_qa
-      - pixel_qa
+      - BTB6
+      - RADSATQA
+      - PIXELQA
     SR:
-      - sr_band1
-      - sr_band2
-      - sr_band3
-      - sr_band4
-      - sr_band5
-      - sr_band7
-      - sr_atmos_opacity
-      - sr_cloud_qa
-      - radsat_qa
-      - pixel_qa
-    PQA:
-      - sr_atmos_opacity
-      - sr_cloud_qa
-      - radsat_qa
-      - pixel_qa
-      - st_qa
-    _browse:
-      - toa_band3
-      - toa_band4
-      - toa_band5
+      - SRB1
+      - SRB2
+      - SRB3
+      - SRB4
+      - SRB5
+      - SRB7
+      - SRATMOSOPACITYQA
+      - SRCLOUDQA
+      - RADSATQA
+      - PIXELQA
+    QA:
+      - SRATMOSOPACITYQA
+      - SRCLOUDQA
+      - RADSATQA
+      - PIXELQA
+      - STQA
     SW:
-      - dswe_mask
-      - dswe_diag
-      - dswe_intrpd
-      - dswe_pshsccss
-      - percent_slope
-      - hillshade
-      - pixel_qa
+      - MASK
+      - DIAG
+      - INTR
+      - INWM
+      - SLOPE
+      - SHADE
+      - PIXELQA
     ST:
-      - surface_temperature
-      - st_downwelled_radiance
-      - st_upwelled_radiance
-      - st_thermal_radiance
-      - emis
-      - emis_stdev
-      - st_cloud_distance
-      - st_atmospheric_transmittance
-      - st_qa
-      - pixel_qa
+      - ST
+      - DRAD
+      - URAD
+      - TRAD
+      - EMIS
+      - EMSD
+      - CDIST
+      - ATRAN
+      - STQA
+      - PIXELQA
+
+  browse:
+    blue:  TAB3
+    green: TAB4
+    red:   TAB5
 
 LT05:
   <<: *l457
@@ -191,7 +192,7 @@ LC08:
     st_qa: STQA
     surface_temperature: ST
 
-  types:
+  datatype:
     # NoData value = -9999
     1:
       - toa_band1
@@ -239,62 +240,63 @@ LC08:
       - hillshade
 
   package:
-    TOA:
-      - radsat_qa
-      - pixel_qa
-      - solar_azimuth_band4
-      - solar_zenith_band4
-      - sensor_azimuth_band4
-      - sensor_zenith_band4
-      - toa_band1
-      - toa_band2
-      - toa_band3
-      - toa_band4
-      - toa_band5
-      - toa_band6
-      - toa_band7
-      - toa_band9
+    TA:
+      - RADSATQA
+      - PIXELQA
+      - SOA4
+      - SOZ4
+      - SEA4
+      - SEZ4
+      - TAB1
+      - TAB2
+      - TAB3
+      - TAB4
+      - TAB5
+      - TAB6
+      - TAB7
+      - TAB9
     BT:
-      - bt_band10
-      - bt_band11
-      - radsat_qa
-      - pixel_qa
+      - BTB10
+      - BTB11
+      - RADSATQA
+      - PIXELQA
     SR:
-      - sr_band1
-      - sr_band2
-      - sr_band3
-      - sr_band4
-      - sr_band5
-      - sr_band6
-      - sr_band7
-      - radsat_qa
-      - pixel_qa
-      - sr_aerosol
-    PQA:
-      - radsat_qa
-      - pixel_qa
-      - sr_aerosol
-      - st_qa
-    _browse:
-      - toa_band4
-      - toa_band5
-      - toa_band6
+      - SRB1
+      - SRB2
+      - SRB3
+      - SRB4
+      - SRB5
+      - SRB6
+      - SRB7
+      - RADSATQA
+      - PIXELQA
+      - SRAEROSOLQA
+    QA:
+      - RADSATQA
+      - PIXELQA
+      - SRAEROSOLQA
+      - STQA
     SW:
-      - dswe_mask
-      - dswe_diag
-      - dswe_intrpd
-      - dswe_pshsccss
-      - percent_slope
-      - hillshade
-      - pixel_qa
+      - MASK
+      - DIAG
+      - INTR
+      - INWM
+      - SLOPE
+      - SHADE
+      - PIXELQA
     ST:
-      - surface_temperature
-      - st_downwelled_radiance
-      - st_upwelled_radiance
-      - st_thermal_radiance
-      - emis
-      - emis_stdev
-      - st_cloud_distance
-      - st_atmospheric_transmittance
-      - st_qa
-      - pixel_qa
+      - ST
+      - DRAD
+      - URAD
+      - TRAD
+      - EMIS
+      - EMSD
+      - CDIST
+      - ATRAN
+      - STQA
+      - PIXELQA
+
+  browse:
+    blue:  TAB4
+    green: TAB5
+    red:   TAB6

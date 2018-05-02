@@ -4,6 +4,8 @@ import os
 import sys
 import ConfigParser
 
+import yaml
+
 from util import logger
 
 
@@ -61,3 +63,62 @@ def read_config(config_file=None):
         raise ValueError('Configuration is missing "products" to process')
 
     return options
+
+
+def read_processing_config(sensor, filename=None):
+    """ Read ARD Tile data processing options
+
+    Args:
+        sensor (str): Top-level name for current options
+        filename (str): path to yaml configuration
+
+    Returns:
+        dict: options subset by specified sensor
+    """
+    if filename is None:
+        filename = os.path.expanduser('~/ARD_Clip.yaml')
+    if not os.path.exists(filename):
+        raise IOError("Cannot open processing configuration %s" % filename)
+    conf = yaml.load(open(filename))
+    if sensor not in conf:
+        raise ValueError('Sensor not found: %s' % sensor)
+    return conf[sensor]
+
+
+def datatype_searches(conf, datatype):
+    """ Fetch list of data of a common format (nodata, bytesize/bytetype, ...)
+
+    Args:
+        conf (dict): raw structure from `read_processing_config`
+        datatype (str,int): product listed under 'datatype'
+
+    Returns:
+        list: all bands listed under datatype
+
+    Example:
+        >>> datatype_searches(conf, 1)
+        ['toa_band1', 'dswe_diag', ...]
+    """
+    if datatype not in conf['datatype']:
+        raise ValueError('Datatype not found: %s' % datatype)
+    return conf['datatype'][datatype]
+
+
+def determine_output_products(conf, product):
+    """ Get the output name mapping for a given product
+
+    Args:
+        conf (dict): raw structure from `read_processing_config`
+        product (str): product listed under 'package'
+
+    Returns:
+        dict: output input-to-output name mapping
+
+    Example:
+        >>> determine_output_products(conf, 'TA')
+        {'toa_band1': 'TAB1', ...}
+    """
+    if product not in conf['package']:
+        raise ValueError('Product not found: %s' % product)
+    return {k:v for k,v in conf['rename'].items()
+            if v in conf['package'][product]}
