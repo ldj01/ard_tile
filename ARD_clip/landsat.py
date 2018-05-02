@@ -27,6 +27,11 @@ def match_dt(product_id, fields=('acqdate', 'procdate'), dtfmt=r'%Y%m%d'):
             for k, v in match(product_id).items()}
 
 
+def get_production_timestamp():
+    """ Create a string containing the current UTC date/time in ISO 8601 format """
+    return datetime.datetime.utcnow().strftime(r'%Y-%m-%dT%H:%M:%SZ')
+
+
 def generate_tile_id(product_id, current_tile, region, collection, version):
     """ Create a current Landsat Tile ID based on a product ID
 

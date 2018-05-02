@@ -163,11 +163,6 @@ def process_checksums(indir='.', filext="*.tar", outdir='.'):
         make_file_group_writeable(md5name)
 
 
-def get_production_timestamp():
-    """ Create a string containing the current UTC date/time in ISO 8601 format """
-    return datetime.datetime.utcnow().strftime(r'%Y-%m-%dT%H:%M:%SZ')
-
-
 def tar_archive(output_filename, files):
     """ Combine files as single-layer tar archive
 
