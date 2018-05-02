@@ -71,19 +71,16 @@ def watch_stdout(cmd):
         dict: exit status code and text output stream from stdout
     """
     logging.debug('Execute: %s', cmd)
-    process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, bufsize=1)
+    process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, bufsize=0)
     output = []
     for line in iter(process.stdout.readline, b''):
         logging.debug(line.strip())
         output.append(line.strip())
-        if process.poll() is not None:
-            break
-    process.stdout.close()
-    process.wait()
+    return_code = process.wait()
     return {
         'cmd': cmd,
-        'status': process.returncode,
-        'output': output
+        'status': return_code,
+        'output': output,
     }
 
 
