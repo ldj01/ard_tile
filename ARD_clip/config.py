@@ -59,6 +59,10 @@ def read_config(config_file=None):
         options.soap_envelope = config.get(section, 'soap_envelope_template')
     if config.has_option(section, 'debug'):
         options.debug = config.getboolean(section, 'debug')
+    if config.has_option(section, 'minscenespertile'):
+        options.minscenespertile = config.getint(section, 'minscenespertile')
+    if config.has_option(section, 'maxscenespertile'):
+        options.maxscenespertile = config.getint(section, 'maxscenespertile')
     if config.has_option(section, 'products'):
         options.products = config.get(section, 'products').split(',')
     else:
