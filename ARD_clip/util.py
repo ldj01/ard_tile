@@ -186,17 +186,16 @@ def tar_archive(output_filename, files):
     make_file_group_writeable(output_filename)
 
 
-def untar_archive(filename, rootdir='.'):
+def untar_archive(filename, directory='.'):
     """ Extracts a tar.gz file into directory location, using basename as new folder name
 
     Args:
         filename (str): path to tar.gz archive
-        rootdir (str): path to base directory to extract files
+        directory (str): path to base directory to extract files
 
     Returns:
         str: path to new created directory
     """
-    directory = os.path.join(rootdir, os.path.basename(filename).split('.')[0])
     if make_dirs(directory):
         logger.info('Unpacking tar: %s', filename)
         tar = tarfile.open(filename, 'r:gz')
