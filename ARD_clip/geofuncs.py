@@ -6,9 +6,7 @@
 #
 #
 # ==========================================================================
-import datetime
 import os
-import logging
 import sys
 import urllib2
 
@@ -18,11 +16,6 @@ import numpy as np
 import db
 import landsat
 from util import logger
-
-
-def get_production_timestamp():
-    """ Create a string containing the current UTC date/time in ISO 8601 format """
-    return datetime.datetime.utcnow().strftime(r'%Y-%m-%dT%H:%M:%SZ')
 
 
 # ----------------------------------------------------------------------------------------------
