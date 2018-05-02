@@ -50,7 +50,9 @@ def read_config(config_file=None):
     if config.has_option(section, 'dbconnect'):
         options.connstr = config.get(section, 'dbconnect')
     if config.has_option(section, 'version'):
-        options.version = config.get(section, 'version')
+        options.version = config.getint(section, 'version')
+    if config.has_option(section, 'collection'):
+        options.collection = config.getint(section, 'collection')
     if config.has_option(section, 'hsmstage'):
         options.hsmstage = config.getboolean(section, 'hsmstage')
     if config.has_option(section, 'soap_envelope_template'):
