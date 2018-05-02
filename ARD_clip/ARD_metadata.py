@@ -26,12 +26,14 @@
 #
 # ==========================================================================
 import os
-from ARD_HelperFunctions import getARDName
-from osgeo import osr,ogr
 import xml.etree.ElementTree as ET
 import xml.dom.minidom as minidom
-import traceback
+
 from espa import Metadata
+
+from util import logger
+import util
+import geofuncs
 
 # ----------------------------------------------------------------------------------------------
 #
@@ -572,32 +574,21 @@ def fixTileBand2(debug, logger, tileID, filenameCrosswalk, \
 #
 def getGeographicBoundingCoordinates(logger, horiz, vertical, region):
 
-    if 'ARD_AUX_DIR' in os.environ:
-        aux_path = os.getenv('ARD_AUX_DIR')
-        daShapefile = aux_path + "/shapefiles/" + region + "_ARD_tiles_geographic.shp"
-        driver = ogr.GetDriverByName('ESRI Shapefile')
-        dataSource = driver.Open(daShapefile, 0) # 0 means read-only. 1 means writeable.
-    else:
-        logger.error('ARD_AUX_DIR environment variable not set')
-        raise KeyError('ARD_AUX_DIR environment variable not set')
+    datasource = geofuncs.read_shapefile(region=region)
+    layer = datasource.GetLayer()
+    query = 'H=' + str(int(horiz)) + ' and V=' + str(int(vertical))
+    layer.SetAttributeFilter(query)
+    for feature in layer:
+        latN = feature.GetField("LAT_NORTH")
+        latS = feature.GetField("LAT_SOUTH")
+        lonW = feature.GetField("LON_WEST")
+        lonE = feature.GetField("LON_EAST")
+        newBoundingCoords = '<bounding_coordinates><west>' + str(lonW) + '</west><east>' + \
+                str(lonE) + '</east><north>' + str(latN) + '</north><south>' + str(latS) + \
+                '</south></bounding_coordinates>'
+        logger.debug('      > meta: {0}'.format(newBoundingCoords))
 
-    if dataSource is None:
-        logger.info('Could not open {0}'.format(daShapefile))
-    else:
-        layer = dataSource.GetLayer()
-        query = 'H=' + str(int(horiz)) + ' and V=' + str(int(vertical))
-        layer.SetAttributeFilter(query)
-        for feature in layer:
-            latN = feature.GetField("LAT_NORTH")
-            latS = feature.GetField("LAT_SOUTH")
-            lonW = feature.GetField("LON_WEST")
-            lonE = feature.GetField("LON_EAST")
-            newBoundingCoords = '<bounding_coordinates><west>' + str(lonW) + '</west><east>' + \
-                    str(lonE) + '</east><north>' + str(latN) + '</north><south>' + str(latS) + \
-                    '</south></bounding_coordinates>'
-            logger.debug('      > meta: {0}'.format(newBoundingCoords))
-
-            return newBoundingCoords
+        return newBoundingCoords
 
 
 # ----------------------------------------------------------------------------------------------
