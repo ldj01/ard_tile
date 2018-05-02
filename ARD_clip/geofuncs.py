@@ -258,7 +258,7 @@ def get_tile_scene_intersections(connection, product_id, region, n=2):
            'LR_X': -765585,
            'UL_X': -915585,
            'UR_Y': 2864805}, ...],
-        { 'H011V004P035': [{'acqdate': '19890712',
+        { 'H011V004': [{'acqdate': '19890712',
             'mission': 'LT04',
             'procdate': '20161110',
             'wrspath': '035',
@@ -314,11 +314,7 @@ def get_tile_scene_intersections(connection, product_id, region, n=2):
 
                 for name in scene_records.keys():
                     # Add path, row of input scene to dictionary
-                    key = ''.join([
-                        'H%03d' % tile['H'],
-                        'V%03d' % tile['V'],
-                        'P', id_info['wrspath']
-                    ])
+                    key = 'H{H:03d}V{V:03d}'.format(**tile)
                     # Now see if tile intersects with north and south scene
                     # and put into a dictionary
                     if geom2.Intersects(scene_records[name]):
