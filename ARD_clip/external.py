@@ -5,17 +5,15 @@ import urllib2
 from util import logger
 
 
-def stage_files(segment, soap_envelope, ignore_errors=True):
+def stage_files(file_locations, soap_envelope, ignore_errors=True):
     """ Request required L2 scene bundles be moved to fastest cache available. """
     try:
        logger.info('Start staging...')
        url="https://dds.cr.usgs.gov/HSMServices/HSMServices?wsdl"
        headers = {'content-type': 'text/xml'}
 
-       files = ''
-       for scene_record in segment:
-           files += '<files>' + scene_record['FILE_LOC'] + '</files>'
-       soap_envelope = soap_envelope.replace("#################", files)
+       files = ''.join(['<files>{}</files>'.format(x) for x in file_locations])
+       soap_envelope = soap_envelope.format(FILES_PLACE_HOLDER=files, WAIT="false")
 
        logger.debug('SOAP Envelope: {0}'.format(soap_envelope))
        request_object = urllib2.Request(url, soap_envelope, headers)
