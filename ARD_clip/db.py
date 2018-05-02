@@ -128,3 +128,19 @@ def select_corner_polys(connection, scene_ids):
     # Oracle does not support binding for IN
     poly_intersect_sql = poly_intersect_sql.format(",".join(["'%s'" %x  for x in scene_ids]))
     return select(connection, poly_intersect_sql)
+
+
+def check_tile_status(connection, tile_id):
+    """ Fetch information about a tile id """
+    tile_status_sql = ("select tile_id, contributing_scenes, complete_tile from ARD_COMPLETED_TILES"
+                       " where tile_id = :tile_id")
+    return select(connection, tile_status_sql, tile_id=tile_id)
+
+
+def fetch_file_loc(connection, sat, wildcard):
+    """ Wildcard search for File Locations by mission and glob """
+    wildcard = '%{w}%'.format(w=wildcard)
+    file_loc_sql = ("select FILE_LOC, LANDSAT_PRODUCT_ID from ARD_L2_ALBERS_INVENTORY_V where"
+                    " SATELLITE = :sat AND LANDSAT_PRODUCT_ID like :wildcard"
+                    " order by LANDSAT_PRODUCT_ID desc")
+    return select(connection, file_loc_sql, sat=sat, wildcard=wildcard)
