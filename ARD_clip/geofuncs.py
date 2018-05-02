@@ -147,28 +147,11 @@ def parseHistFile(histFilename):
 #   Purpose:  A file containing a histogram of values in the lineage band has been
 #                     generated.  Open the file and find the highest value.
 #
-def parseSceneHistFile(sceneFilename):
+def parse_gdal_hist_output(gdal_hist_output):
 
-    if (not os.path.isfile(sceneFilename)):
-        return ('ERROR - File does not exist',)
-    else:
-        try:
-            infile = open(sceneFilename, 'r')
-            sceneHistLines = infile.read()
-            infile.close()
-        except:
-            return ('ERROR - Opening or closing scenes.json file',)
-
-    bucketsLoc = sceneHistLines.find('buckets from')
-    colonLoc = sceneHistLines.find(':', bucketsLoc + 1)
-
-    histArray = []
-    headLoc = sceneHistLines.find('  ', colonLoc) + 2
-    while (len(histArray) <= 255):
-        tailLoc = sceneHistLines.find(' ', headLoc)
-        histArray.append(sceneHistLines[headLoc:tailLoc])
-        headLoc = tailLoc + 1
-
+    bucket_index = [i for i, line in enumerate(gdal_hist_output)
+                    if 'buckets from ' in line].pop()
+    histArray = gdal_hist_output[bucket_index + 1].split()
     count1 = long(histArray[1])
     count2 = long(histArray[2])
     count3 = long(histArray[3])
