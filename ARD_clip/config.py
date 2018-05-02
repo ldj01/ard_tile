@@ -82,7 +82,7 @@ def read_processing_config(sensor, filename=None):
         dict: options subset by specified sensor
     """
     if filename is None:
-        filename = os.path.expanduser('~/ARD_Clip.yaml')
+        filename = os.path.abspath('ARD_Clip.yaml')
     if not os.path.exists(filename):
         raise IOError("Cannot open processing configuration %s" % filename)
     conf = yaml.load(open(filename))
@@ -91,23 +91,21 @@ def read_processing_config(sensor, filename=None):
     return conf[sensor]
 
 
-def datatype_searches(conf, datatype):
+def datatype_searches(conf, band_name):
     """ Fetch list of data of a common format (nodata, bytesize/bytetype, ...)
 
     Args:
         conf (dict): raw structure from `read_processing_config`
-        datatype (str,int): product listed under 'datatype'
+        band_name (str): product listed under 'datatype'
 
     Returns:
-        list: all bands listed under datatype
+        str,int: datatype for given band_name
 
     Example:
-        >>> datatype_searches(conf, 1)
-        ['toa_band1', 'dswe_diag', ...]
+        >>> datatype_searches(conf, 'toa_band1')
+        1
     """
-    if datatype not in conf['datatype']:
-        raise ValueError('Datatype not found: %s' % datatype)
-    return conf['datatype'][datatype]
+    return [d for d, l in conf['datatype'].items() if band_name in l].pop()
 
 
 def determine_output_products(conf, product):
