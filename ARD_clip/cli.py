@@ -27,6 +27,7 @@ if __name__ == '__main__':
 
     args = parse_cli()
     conf = config.read_config(args['config_file'])
+    setup_logger(level='debug' if conf.debug else 'info')
 
     logger.info('******************Start************')
     logger.info('             DB connection: {0}'.format(conf.connstr))
