@@ -295,7 +295,6 @@ def get_tile_scene_intersections(connection, product_id, region, n=2):
         spatialRef = layer.GetSpatialRef()
         for name in scene_records.keys():
             scene_records[name].AssignSpatialReference(spatialRef)
-            logger.debug('???>>> %s ||', name)
 
         for feature2 in layer:
             geom2 = feature2.GetGeometryRef()
