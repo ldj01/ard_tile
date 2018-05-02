@@ -197,16 +197,21 @@ def untar_archive(filename, rootdir='.'):
         str: path to new created directory
     """
     directory = os.path.join(rootdir, os.path.basename(filename).split('.')[0])
-    if os.path.isdir(directory):
-        logger.debug('Archive already unpacked: %s', directory)
-        return directory
-
-    logger.info('Create new directory: %s', directory)
-    os.makedirs(directory)
-
-    logger.info('Unpacking tar: %s', filename)
-    tar = tarfile.open(filename, 'r:gz')
-    tar.extractall(directory)
-    tar.close()
-    logger.info('End unpacking tar')
+    if make_dirs(directory):
+        logger.info('Unpacking tar: %s', filename)
+        tar = tarfile.open(filename, 'r:gz')
+        tar.extractall(directory)
+        tar.close()
+        logger.info('End unpacking tar')
     return directory
+
+
+def make_dirs(directory):
+    """ Create a directory if it does not already exist """
+    if not os.path.isdir(directory):
+        logger.info('Create new directory: %s', directory)
+        os.makedirs(directory)
+        return True
+    else:
+        logger.debug('Directory already exists: %s', directory)
+        return False
