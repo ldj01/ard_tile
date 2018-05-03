@@ -56,7 +56,6 @@ LE07: &l457
       - bt_band6
       - sr_atmos_opacity
       - dswe_diag
-      - percent_slope
       - surface_temperature
       - st_downwelled_radiance
       - st_upwelled_radiance
@@ -64,7 +63,6 @@ LE07: &l457
       - st_atmospheric_transmittance
       - st_cloud_distance
       - emis
-      - emis_stdev
       - st_qa
     # NoData value = -32768
     2:
@@ -76,13 +74,21 @@ LE07: &l457
     4:
       - radsat_qa
       - pixel_qa
+    # DSWE NoData Convert from 255 to -9999
+    5:
       - dswe_intrpd
       - dswe_mask
       - dswe_pshsccss
-      - hillshade
     # NoData value uses LINEAGE
-    5:
+    6:
       - sr_cloud_qa
+    # NoData 255 and uses LINEAGE
+    7:
+      - hillshade
+    # NoData -9999 and uses LINEAGE
+    8:
+      - emis_stdev
+      - percent_slope
 
   package:
     TA:
@@ -213,7 +219,6 @@ LC08:
       - bt_band10
       - bt_band11
       - dswe_diag
-      - percent_slope
       - surface_temperature
       - st_downwelled_radiance
       - st_upwelled_radiance
@@ -221,7 +226,6 @@ LC08:
       - st_atmospheric_transmittance
       - st_cloud_distance
       - emis
-      - emis_stdev
       - st_qa
     # NoData value = -32768
     2:
@@ -234,10 +238,18 @@ LC08:
       - radsat_qa
       - pixel_qa
       - sr_aerosol
+    # DSWE NoData Convert from 255 to -9999
+    5:
       - dswe_intrpd
       - dswe_mask
       - dswe_pshsccss
+    # NoData 255 and uses LINEAGE
+    7:
       - hillshade
+    # NoData -9999 and uses LINEAGE
+    8:
+      - emis_stdev
+      - percent_slope
 
   package:
     TA:
