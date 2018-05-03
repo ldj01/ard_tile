@@ -9,6 +9,7 @@ import logging
 
 import db
 import util
+import config
 import landsat
 import external
 import geofuncs
@@ -20,7 +21,7 @@ from ARD_metadata import buildMetadata
 def process_tile(current_tile, segment, region, tiles_contrib_scenes, output_path, conf):
     """ Big loop for each tile needed """
 
-    productionDateTime = landsat.get_production_timestamp()
+    production_timestamp = landsat.get_production_timestamp()
     tile_id = landsat.generate_tile_id(segment['LANDSAT_PRODUCT_ID'], current_tile, region, conf.collection, conf.version)
     clip_extents = '{UL_X} {LL_Y} {LR_X} {UR_Y}'.format(**current_tile)
 
@@ -67,7 +68,7 @@ def process_tile(current_tile, segment, region, tiles_contrib_scenes, output_pat
     n_contrib_scenes = len(contributing_scenes)
     is_complete_tile = 'Y' if n_contrib_scenes == len(contrib_tile_scenes) else 'N'
     logger.info("Contributing scenes: %s", contributing_scenes)
-    logger.info('Complete tile available: %s', is_complete_tile)
+    logger.info('All scenes found to complete tile: %s', is_complete_tile)
     logger.info('Tile: %s  - Number of contributing scenes: %d', tile_id, n_contrib_scenes)
 
     # Maximum # of scenes that can contribute to a tile is 3
@@ -87,7 +88,8 @@ def process_tile(current_tile, segment, region, tiles_contrib_scenes, output_pat
 
         logger.info('Required Scene: %s', tar_file_location)
         try:
-            scene_dir = util.untar_archive(tar_file_location, directory=product_id)
+            directory = os.path.join(conf.workdir, product_id)
+            scene_dir = util.untar_archive(tar_file_location, directory=directory)
         except:
             logger.exception('Error staging input data for {}: {}'.format(product_id, tar_file_location))
             return 'ERROR'
@@ -96,62 +98,64 @@ def process_tile(current_tile, segment, region, tiles_contrib_scenes, output_pat
 
     # Determine which scene(s) will overlay the other scene(s) for this tile.
     # North scenes (lower row #) will always overlay South scenes (higher row #)
-    logging.debug('%%%%%%%%%%% {}'.format(zip(range(1, n_contrib_scenes+1),
-                                   sorted(contributing_scenes.keys()))))
     stacking = {i: {'LANDSAT_PRODUCT_ID': name,
-                    'XML_LOC': glob.glob(os.path.join(name, '*.xml'))[0]}
+                    'XML_LOC': util.ffind(conf.workdir, name, '*.xml')}
                 for i, name in zip(range(1, n_contrib_scenes+1),
                                    sorted(contributing_scenes.keys()))}
 
-    util.make_dirs(tile_id)
-    raise NotImplementedError('OK SO WE SHOULD BE GOOD TO GO HERE!@')
+    util.make_dirs(os.path.join(conf.workdir, tile_id))
 
-    if process_bandtype_1() == 'ERROR':
-        return 'ERROR'
+    producers = config.read_processing_config(sensor=segment['SATELLITE'])
 
-    if process_bandtype_2() == 'ERROR':
-        return 'ERROR'
+    datatypes = {
+        1: process_bandtype_1,
+        2: process_bandtype_2,
+        3: process_bandtype_3,
+        4: process_bandtype_4,
+        5: process_bandtype_5,
+        6: process_bandtype_6, # WARNING: Type 6 requires LINEAGE to be run first
+        7: process_bandtype_7, # WARNING: Type 7 requires LINEAGE to be run first
+        8: process_bandtype_8, # WARNING: Type 8 requires LINEAGE to be run first
+    }
 
-    if process_bandtype_3() == 'ERROR':
-        return 'ERROR'
+    outputs = dict()
+    for product_request in sorted(conf.products, reverse=True):
+        logging.info('Create product %s', product_request)
+        required_bands = config.determine_output_products(producers, product_request)
+        for band_name, rename in required_bands.items():
+            dtype = config.datatype_searches(producers, band_name)
+            logger.info('Requires base band_name %s (Type %s)', band_name, dtype)
 
-    if process_bandtype_4() == 'ERROR':
-        return 'ERROR'
+            # Process the current dataset type
+            filename = datatypes[dtype](stacking, band_name, clip_extents, tile_id, rename, conf.workdir)
+            outputs[band_name] = filename
 
-    if process_lineage() == 'ERROR':
-        return 'ERROR'
+            if band_name == 'toa_band1':
+                outputs['_LINEAGE'] = process_lineage(stacking, band_name, clip_extents, tile_id, 'LINEAGEQA', conf.workdir)
+                lng_count, lng_array = process_lineage_contributing(outputs['_LINEAGE'], n_contrib_scenes, tile_id, conf.workdir)
 
-    if process_bandtype_5() == 'ERROR':
-        return 'ERROR'
+        if filename in ('ERROR', 'NOT NEEDED'):
+            return filename
 
-    if process_metadata() == 'ERROR':
-        return 'ERROR'
+    outputs['XML'] = process_metadata(segment, stacking, tile_id, clip_extents, region, lng_count, lng_array,
+                                      production_timestamp, outputs, conf.workdir)
 
-    if process_browse() == 'ERROR':
-        return 'ERROR'
+    process_output(conf.products, producers, outputs, tile_id, output_path)
+    util.process_checksums(indir=conf.workdir, outdir=output_path)
+    process_browse(producers['browse'], conf.workdir, tile_id, output_path)
 
-    if process_output() == 'ERROR':
-        return 'ERROR'
+    # Remove the temporary work directory, but keep adjacent scenes for other tiles
+    if not conf.debug:
+        logger.info('    Cleanup: Removing temp directory: {0} ...'.format(os.path.join(conf.workdir, tile_id)))
+        util.remove(os.path.join(conf.workdir, tile_id))
 
-    util.process_checksums()
-
-                                                    # Remove the temporary work directory
-    if (conf.debug == False):
-        logger.info('    Cleanup: Removing temp directory: {0} ...'.format(tile_id))
-        try:
-            shutil.rmtree(tile_id)
-            logger.info('test rmtree: {0}'.format(tile_id))
-        except:
-            logger.exception('Error: Removing directory: {0} ...'.format(tile_id))
-            # continue on, even if we encountered an error down here
-
-    # No errors making this tile, record it in our database
-    completed_tile_list = [[tile_id,",".join(contributing_scenes.keys()), is_complete_tile, "SUCCESS"]]
-    db.insert_tile_record(db.connection(conf.connstr), completed_tile_list)
+        # No errors making this tile, record it in our database
+        completed_tile_list = [[tile_id,",".join(contributing_scenes.keys()), is_complete_tile, "SUCCESS"]]
+        db.insert_tile_record(db.connection(conf.connstr), completed_tile_list)
     return "SUCCESS"
 
 
-def process_bandtype_1():
+def process_bandtype_1(stacking, band_name, clip_extents, tile_id, rename, workdir):
     # --------------------------------------------------------------------------------------------------------------------------- #
     #
     #     Band Type 1
@@ -160,111 +164,30 @@ def process_bandtype_1():
     #     		NoData = -9999
     #
     #
-    logger.info('     Start processing for band: {0}'.format(curBand))
+    logger.info('     Start processing for band: %s', band_name)
+    mosaic_filename =  os.path.join(workdir, tile_id, tile_id + '_' + rename + '.tif')
 
-    clipParams = ' -dstnodata "-9999" -srcnodata "-9999" '
-    clipParams = clipParams + '-co "compress=deflate" -co "zlevel=9" -co "tiled=yes" -co "predictor=2" '
-    newARDname = getARDName(curBand, filenameCrosswalk)
-    if (newARDname == 'ERROR'):
-        logger.error('Error in filenameCrosswalk for: {0}'.format(curBand))
-        return "ERROR"
-    mosaicFileName = tile_id + '_' + newARDname + '.tif'
-    lineageTifName = tile_id + '_LINEAGEQA.tif'
-    lineageFullName = os.path.join(tileDir, lineageTifName)
+    if os.path.exists(mosaic_filename):
+        logger.warning("Skip previously generated result %s", mosaic_filename)
+        return mosaic_filename
 
-    if (numScenesPerTile == 1):                                     # 1 contributing scene
-        sceneFullName = os.path.join(stackA_Dir, stackA_Prefix + '_' + curBand + '.tif')
-        mosaicFullName = os.path.join(tileDir, mosaicFileName)
-        warpCmd = gdalwarpLoc + ' -te ' + cutLimits + clipParams + \
-                            sceneFullName + ' ' + mosaicFullName
-        if (debug):
-            logger.info('        Single scene command: {0}'.format(warpCmd))
-        try:
-            returnValue = call(warpCmd, shell=True)
-        except:
-            logger.error('Error: warpCmd - 1 contributing scene')
-            logger.error('        Error: {0}'.format(traceback.format_exc()))
-            return "ERROR"
+    clip_params = ' -dstnodata "-9999" -srcnodata "-9999" '
+    clip_params += '-co "compress=deflate" -co "zlevel=9" -co "tiled=yes" -co "predictor=2" '
 
-        if (curBand == 'toa_band1'):                                 # needed for lineage file generation later
-            lineage01Name = mosaicFullName
+    warp_cmd = 'gdalwarp -te ' + clip_extents + clip_params
+    for level, stack in stacking.items():
+        scene_name = util.ffind(workdir, stack['LANDSAT_PRODUCT_ID'], '*' + band_name + '.tif')
+        warp_cmd += ' ' + scene_name
+    warp_cmd += ' ' + mosaic_filename
+    util.execute_cmd(warp_cmd)
+
+    logger.info('    End processing for %s as %s ', band_name, mosaic_filename)
+    if not os.path.exists(mosaic_filename):
+        logger.error('Processing failed to generate desired output: %s', mosaic_filename)
+    return mosaic_filename
 
 
-    elif (numScenesPerTile == 2):                                     # 2 contributing scenes
-        northFilename = stackA_Prefix + '_' + curBand + '.tif'
-        southFilename = stackB_Prefix + '_' + curBand + '.tif'
-
-        northFullname = os.path.join(stackA_Dir, northFilename)
-        southFullname = os.path.join(stackB_Dir, southFilename)
-        mosaicFullName = os.path.join(tileDir, mosaicFileName)
-
-        warpCmd = gdalwarpLoc + ' -te ' + cutLimits + clipParams + \
-                            southFullname + ' ' + northFullname + ' ' + mosaicFullName
-        if (debug):
-            logger.info('        Two scene command: {0}'.format(warpCmd))
-        try:
-            returnValue = call(warpCmd, shell=True)
-        except:
-            logger.error('Error: warpCmd - 2 contributing scenes')
-            logger.error('        Error: {0}'.format(traceback.format_exc()))
-            return 'ERROR'
-
-        if (curBand == 'toa_band1'):                                    # needed for lineage file generation later
-            lineage01 = northFullname
-            lineage02 = southFullname
-
-    else:                                                                          # 3 contributing scenes
-        northFilename = stackA_Prefix + '_' + curBand + '.tif'
-        midFilename = stackB_Prefix + '_' + curBand + '.tif'
-        southFilename = stackC_Prefix + '_' + curBand + '.tif'
-
-        northFullname = os.path.join(stackA_Dir, northFilename)
-        midFullname = os.path.join(stackB_Dir, midFilename)
-        southFullname = os.path.join(stackC_Dir, southFilename)
-        mosaicFullName = os.path.join(tileDir, mosaicFileName)
-
-        warpCmd = gdalwarpLoc + ' -te ' + cutLimits + clipParams + southFullname + \
-                            ' ' + midFullname + ' ' + northFullname + ' ' + mosaicFullName
-        if (debug):
-            logger.info('        Three scene command: {0}'.format(warpCmd))
-        try:
-            returnValue = call(warpCmd, shell=True)
-        except:
-            logger.error('Error: warpCmd - 3 contributing scenes')
-            logger.error('        Error: {0}'.format(traceback.format_exc()))
-            return 'ERROR'
-
-        if (curBand == 'toa_band1'):                                    # needed for lineage file generation later
-            lineage01 = northFullname
-            lineage02 = midFullname
-            lineage03 = southFullname
-
-    logger.info('    End processing for: {0}'.format(curBand))
-
-    if curBand in bands_for_toa:
-        toaFinishedList.append(mosaicFileName)
-
-    if curBand in bands_for_sr:
-        srFinishedList.append(mosaicFileName)
-
-    if curBand in bands_for_bt:
-        btFinishedList.append(mosaicFileName)
-
-    if curBand in bands_for_pqa:
-        qaFinishedList.append(mosaicFileName)
-
-    if curBand in bands_for_swater:
-        swFinishedList.append(mosaicFileName)
-
-    if curBand in bands_for_stemp:
-        stFinishedList.append(mosaicFileName)
-
-                                                        # save for browse later
-    if curBand in bands_for_browse:
-        browseList.append(mosaicFileName)
-
-
-def process_bandtype_2():
+def process_bandtype_2(stacking, band_name, clip_extents, tile_id, rename, workdir):
     # --------------------------------------------------------------------------------------------------------------------------- #
     #
     #     Band Type 2
@@ -272,97 +195,31 @@ def process_bandtype_2():
     #                   16 bit signed integer
     #     		NoData = -32768
     #
-    logger.info('     Start processing for band: {0}'.format(curBand))
+    logger.info('     Start processing for band: %s', band_name)
 
-    clipParams = ' -dstnodata "-32768" -srcnodata "-32768" '
-    clipParams = clipParams + '-co "compress=deflate" -co "zlevel=9" -co "tiled=yes" -co "predictor=2" '
-    newARDname = getARDName(curBand, filenameCrosswalk)
-    if (newARDname == 'ERROR'):
-        logger.error('Error in filenameCrosswalk for: {0}'.format(curBand))
-        return "ERROR"
-    mosaicFileName = tile_id + '_' + newARDname + '.tif'
+    mosaic_filename =  os.path.join(workdir, tile_id, tile_id + '_' + rename + '.tif')
 
+    if os.path.exists(mosaic_filename):
+        logger.warning("Skip previously generated result %s", mosaic_filename)
+        return mosaic_filename
 
-    if (numScenesPerTile == 1):                                     # 1 contributing scene
-        sceneFullName = os.path.join(stackA_Dir, stackA_Prefix + '_' + curBand + '.tif')
-        mosaicFullName = os.path.join(tileDir, mosaicFileName)
-        warpCmd = gdalwarpLoc + ' -te ' + cutLimits + clipParams + \
-                            sceneFullName + ' ' + mosaicFullName
-        if (debug):
-            logger.info('        Single scene command: {0}'.format(warpCmd))
-        try:
-            returnValue = call(warpCmd, shell=True)
-        except:
-            logger.error('Error: warpCmd - 1 contributing scene')
-            logger.error('        Error: {0}'.format(traceback.format_exc()))
-            return 'ERROR'
+    clip_params = ' -dstnodata "-32768" -srcnodata "-32768" '
+    clip_params += '-co "compress=deflate" -co "zlevel=9" -co "tiled=yes" -co "predictor=2" '
+
+    warp_cmd = 'gdalwarp -te ' + clip_extents + clip_params
+    for level, stack in stacking.items():
+        scene_name = util.ffind(workdir, stack['LANDSAT_PRODUCT_ID'], '*' + band_name + '.tif')
+        warp_cmd += ' ' + scene_name
+    warp_cmd += ' ' + mosaic_filename
+    util.execute_cmd(warp_cmd)
+
+    logger.info('    End processing for %s as %s ', band_name, mosaic_filename)
+    if not os.path.exists(mosaic_filename):
+        logger.error('Processing failed to generate desired output: %s', mosaic_filename)
+    return mosaic_filename
 
 
-    elif (numScenesPerTile == 2):                                     # 2 contributing scenes
-        northFilename = stackA_Prefix + '_' + curBand + '.tif'
-        southFilename = stackB_Prefix + '_' + curBand + '.tif'
-
-        northFullname = os.path.join(stackA_Dir, northFilename)
-        southFullname = os.path.join(stackB_Dir, southFilename)
-        mosaicFullName = os.path.join(tileDir, mosaicFileName)
-
-        warpCmd = gdalwarpLoc + ' -te ' + cutLimits + clipParams + \
-                            southFullname + ' ' + northFullname + ' ' + mosaicFullName
-        if (debug):
-            logger.info('        Two scene command: {0}'.format(warpCmd))
-        try:
-            returnValue = call(warpCmd, shell=True)
-        except:
-            logger.error('Error: warpCmd - 2 contributing scenes')
-            logger.error('        Error: {0}'.format(traceback.format_exc()))
-            return 'ERROR'
-
-
-    else:                                                                          # 3 contributing scenes
-        northFilename = stackA_Prefix + '_' + curBand + '.tif'
-        midFilename = stackB_Prefix + '_' + curBand + '.tif'
-        southFilename = stackC_Prefix + '_' + curBand + '.tif'
-
-        northFullname = os.path.join(stackA_Dir, northFilename)
-        midFullname = os.path.join(stackB_Dir, midFilename)
-        southFullname = os.path.join(stackC_Dir, southFilename)
-        mosaicFullName = os.path.join(tileDir, mosaicFileName)
-
-        warpCmd = gdalwarpLoc + ' -te ' + cutLimits + clipParams + southFullname + \
-                            ' ' + midFullname + ' ' + northFullname + ' ' + mosaicFullName
-        if (debug):
-            logger.info('        Three scene command: {0}'.format(warpCmd))
-        try:
-            returnValue = call(warpCmd, shell=True)
-        except:
-            logger.error('Error: warpCmd - 3 contributing scenes')
-            logger.error('        Error: {0}'.format(traceback.format_exc()))
-            return 'ERROR'
-
-    logger.info('    End processing for: {0}'.format(curBand))
-
-
-    if curBand in bands_for_toa:
-        toaFinishedList.append(mosaicFileName)
-
-    if curBand in bands_for_sr:
-        srFinishedList.append(mosaicFileName)
-
-    if curBand in bands_for_bt:
-        btFinishedList.append(mosaicFileName)
-
-    if curBand in bands_for_pqa:
-        qaFinishedList.append(mosaicFileName)
-
-    if curBand in bands_for_swater:
-        swFinishedList.append(mosaicFileName)
-
-    if curBand in bands_for_stemp:
-        stFinishedList.append(mosaicFileName)
-
-
-
-def process_bandtype_3():
+def process_bandtype_3(stacking, band_name, clip_extents, tile_id, rename, workdir):
     # --------------------------------------------------------------------------------------------------------------------------- #
     #
     #     Band Type 3
@@ -371,89 +228,41 @@ def process_bandtype_3():
     #		NoData = 1  in ovelap areas and scan gaps
     #
     #
-    logger.info('    Start processing for: {0}'.format(curBand))
+    logger.info('     Start processing for band: %s', band_name)
 
-    clipParams = ' -dstnodata "1" -srcnodata "1" '
-    tempFileName = targzMission + '_' + collectionLevel + '_' + current_tile[0][0] + current_tile[0][1] + \
-                                '_' + targzYear + acqMonth + acqDay + '_' + curBand + '_m0.tif'
-    tempFullName = os.path.join(tileDir, tempFileName)
+    mosaic_filename =  os.path.join(workdir, tile_id, tile_id + '_' + rename + '.tif')
 
-    if (numScenesPerTile == 1):                                                     # 1 contributing scene
-        inputFileName = stackA_Prefix + '_' + curBand + '.tif'
-        inputFullName = os.path.join(stackA_Dir, inputFileName)
-
-        warpCmd = gdalwarpLoc + ' -te ' + cutLimits + clipParams + inputFullName + ' '  + tempFullName
-        if (debug):
-            logger.info('        mosaic: {0}'.format(warpCmd))
-        try:
-            returnValue = call(warpCmd, shell=True)
-        except:
-            logger.error('Error: warpCmd - 1 contributing scene')
-            logger.error('        Error: {0}'.format(traceback.format_exc()))
-            return 'ERROR'
-
-    elif (numScenesPerTile == 2):                                                   # 2 contributing scenes
-        northFilename = stackA_Prefix + '_' + curBand + '.tif'
-        southFilename = stackB_Prefix + '_' + curBand + '.tif'
-
-        northFullname = os.path.join(stackA_Dir, northFilename)
-        southFullname = os.path.join(stackB_Dir, southFilename)
-
-        warpCmd = gdalwarpLoc + ' -te ' + cutLimits + clipParams + \
-                    southFullname + ' ' + northFullname + ' ' + tempFullName
-        if (debug):
-            logger.info('        mosaic: {0}'.format(warpCmd))
-        try:
-            returnValue = call(warpCmd, shell=True)
-        except:
-            logger.error('Error: warpCmd - 2 contributing scenes')
-            logger.error('        Error: {0}'.format(traceback.format_exc()))
-            return 'ERROR'
-
-    else:                                                                                        # 3 contributing scenes
-        northFilename = stackA_Prefix + '_' + curBand + '.tif'
-        midFilename = stackB_Prefix + '_' + curBand + '.tif'
-        southFilename = stackC_Prefix + '_' + curBand + '.tif'
-
-        northFullname = os.path.join(stackA_Dir, northFilename)
-        midFullname = os.path.join(stackB_Dir, midFilename)
-        southFullname = os.path.join(stackC_Dir, southFilename)
-
-        warpCmd = gdalwarpLoc + ' -te ' + cutLimits + clipParams + southFullname + \
-                            ' ' + midFullname + ' ' + northFullname + ' ' + tempFullName
-        if (debug):
-            logger.info('        mosaic: {0}'.format(warpCmd))
-        try:
-            returnValue = call(warpCmd, shell=True)
-        except:
-            logger.error('Error: warpCmd - 3 contributing scenes')
-            logger.error('        Error: {0}'.format(traceback.format_exc()))
-            return 'ERROR'
-
-                                                    # reassign nodata
-    clipParams = ' -dstnodata "0" -srcnodata "None" '
-    clipParams = clipParams + '-co "compress=deflate" -co "zlevel=9" -co "tiled=yes" -co "predictor=2" '
-    mosaicFileName = targzMission + '_' + collectionLevel + '_' + current_tile[0][0] + current_tile[0][1] + \
-                                '_' + targzYear + acqMonth + acqDay + '_' + curBand + '.tif'
-    mosaicFullName = os.path.join(tileDir, mosaicFileName)
-
-    warpCmd = gdalwarpLoc + clipParams + tempFullName + ' ' + mosaicFullName
-    if (debug):
-        logger.info('        reassign nodata & compress: {0}'.format(warpCmd))
-    try:
-        returnValue = call(warpCmd, shell=True)
-    except:
-        logger.error('Error: warpCmd - nodata')
-        logger.error('        Error: {0}'.format(traceback.format_exc()))
-        return "ERROR"
-
-    logger.info('    End processing for: {0}'.format(curBand))
-
-    finishedMosaicList.append(mosaicFileName)
+    if os.path.exists(mosaic_filename):
+        logger.warning("Skip previously generated result %s", mosaic_filename)
+        return mosaic_filename
 
 
+    warp_cmd = 'gdalwarp -te ' + clip_extents
+    warp_cmd += ' -dstnodata "1" -srcnodata "1" '
 
-def process_bandtype_4():
+    for level, stack in stacking.items():
+        scene_name = util.ffind(workdir, stack['LANDSAT_PRODUCT_ID'], '*' + band_name + '.tif')
+        warp_cmd += ' ' + scene_name
+
+    temp_filename =  os.path.join(workdir, tile_id, tile_id + '_' + rename + '.tif')
+    warp_cmd += ' ' + temp_filename
+    util.execute_cmd(warp_cmd)
+
+    # reassign nodata
+    warp_cmd = 'gdalwarp -dstnodata "0" -srcnodata "None" '
+    warp_cmd += '-co "compress=deflate" -co "zlevel=9" -co "tiled=yes" -co "predictor=2" '
+    warp_cmd += temp_filename + ' ' + mosaic_filename
+    util.execute_cmd(warp_cmd)
+
+    util.remove(temp_filename)
+
+    logger.info('    End processing for %s as %s ', band_name, mosaic_filename)
+    if not os.path.exists(mosaic_filename):
+        logger.error('Processing failed to generate desired output: %s', mosaic_filename)
+    return mosaic_filename
+
+
+def process_bandtype_4(stacking, band_name, clip_extents, tile_id, rename, workdir):
     # --------------------------------------------------------------------------------------------------------------------------- #
     #
     #     Band Type 4
@@ -465,325 +274,108 @@ def process_bandtype_4():
     #		Valid data = 0 - 255
     #
     #
-    logger.info('    Start processing for: {0}'.format(curBand))
+    logger.info('     Start processing for band: %s', band_name)
 
-    newARDname = getARDName(curBand, filenameCrosswalk)
-    if (newARDname == 'ERROR'):
-        logger.error('Error in filenameCrosswalk for: {0}'.format(curBand))
-        return "ERROR"
-    baseName = tile_id + '_' + newARDname
+    mosaic_filename =  os.path.join(workdir, tile_id, tile_id + '_' + rename + '.tif')
 
-    if (numScenesPerTile == 1):                                                         # 1 contributing scene
-        inputFileName = stackA_Prefix + '_' + curBand + '.tif'
-        inputFullName = os.path.join(stackA_Dir, inputFileName)
+    if os.path.exists(mosaic_filename):
+        logger.warning("Skip previously generated result %s", mosaic_filename)
+        return mosaic_filename
 
-        clipParams = ' -dstnodata "1" -srcnodata "1" '
-        clipParams = clipParams + '-co "compress=deflate" -co "zlevel=9" -co "tiled=yes" -co "predictor=2" '
+    warp_cmd = 'gdalwarp -te ' + clip_extents
+    clip_params = ' -dstnodata "1" -srcnodata "1" '
 
-        mosaicFileName = baseName + '.tif'
-        mosaicFullName = os.path.join(tileDir, mosaicFileName)
-        warpCmd = gdalwarpLoc + ' -te ' + cutLimits + clipParams + inputFullName + ' ' + mosaicFullName
-        if (debug):
-            logger.info('        mosaic: {0}'.format(warpCmd))
-        try:
-            returnValue = call(warpCmd, shell=True)
-        except:
-            logger.error('Error: warpCmd - 1 contributing scene')
-            logger.error('        Error: {0}'.format(traceback.format_exc()))
-            return 'ERROR'
+    temp_names = list()
+    for level, stack in stacking.items():
+        temp_name =  os.path.join(workdir, tile_id, tile_id + '_temp%d' % level + '.tif')
+        scene_name = util.ffind(workdir, stack['LANDSAT_PRODUCT_ID'], '*' + band_name + '.tif')
+        temp_warp_cmd = warp_cmd + ' ' + clip_params +  scene_name + ' ' + temp_name
+        util.execute_cmd(temp_warp_cmd)
+        temp_names.append(temp_name)
 
-    elif (numScenesPerTile == 2):                                                       # 2 contributing scenes
-        northFilename = stackA_Prefix + '_' + curBand + '.tif'
-        southFilename = stackB_Prefix + '_' + curBand + '.tif'
+    warp_cmd = 'gdalwarp -co "compress=deflate" -co "zlevel=9" -co "tiled=yes" -co "predictor=2" '
+    warp_cmd += ' '.join(temp_names)
+    warp_cmd += ' ' + mosaic_filename
+    util.execute_cmd(warp_cmd)
+    util.remove(*temp_names)
 
-        northFullname = os.path.join(stackA_Dir, northFilename)
-        southFullname = os.path.join(stackB_Dir, southFilename)
-
-        clipParams = ' -dstnodata "1" -srcnodata "1" '
-
-                                                    # North - Clip to fill entire tile
-        tempName0 =  baseName + '_n0.tif'
-        warpCmd = gdalwarpLoc + ' -te ' + cutLimits + clipParams + \
-                            northFullname + ' ' + os.path.join(tileDir, tempName0)
-        if (debug):
-            logger.info('        north0: {0}'.format(warpCmd))
-        try:
-            returnValue = call(warpCmd, shell=True)
-        except:
-            logger.error('Error: warpCmd - 2 contributing scenes - north')
-            logger.error('        Error: {0}'.format(traceback.format_exc()))
-            return 'ERROR'
-
-                                                    # South - Clip 2nd only
-        tempName1 = baseName + '_s0.tif'
-        warpCmd = gdalwarpLoc + ' -te ' + cutLimits + clipParams + \
-                            southFullname + ' ' + os.path.join(tileDir, tempName1)
-        if (debug):
-            logger.info('        south0: {0}'.format(warpCmd))
-        try:
-            returnValue = call(warpCmd, shell=True)
-        except:
-            logger.error('Error: warpCmd - 2 contributing scenes - south')
-            logger.error('        Error: {0}'.format(traceback.format_exc()))
-            return 'ERROR'
-
-                                                    # mosaic
-        clipParams = '-co "compress=deflate" -co "zlevel=9" -co "tiled=yes" -co "predictor=2" '
-        mosaicFileName = baseName + '.tif'
-        warpCmd = gdalwarpLoc + ' ' + clipParams + os.path.join(tileDir, tempName1) + ' ' + \
-                            os.path.join(tileDir, tempName0) + ' ' + os.path.join(tileDir, mosaicFileName)
-        if (debug):
-            logger.info('        mosaic0: {0}'.format(warpCmd))
-        try:
-            returnValue = call(warpCmd, shell=True)
-        except:
-            logger.error('Error: warpCmd - 2 contributing scenes - mosaic')
-            logger.error('        Error: {0}'.format(traceback.format_exc()))
-            return 'ERROR'
-
-    else:                                                                                             # 3 contributing scenes
-        northFilename = stackA_Prefix + '_' + curBand + '.tif'
-        midFilename = stackB_Prefix + '_' + curBand + '.tif'
-        southFilename = stackC_Prefix + '_' + curBand + '.tif'
-
-        northFullname = os.path.join(stackA_Dir, northFilename)
-        midFullname = os.path.join(stackB_Dir, midFilename)
-        southFullname = os.path.join(stackC_Dir, southFilename)
-
-        clipParams = ' -dstnodata "1" -srcnodata "1" '
-
-                                                    # North - Clip to fill entire tile
-        tempName0 =  baseName + '_n0.tif'
-        warpCmd = gdalwarpLoc + ' -te ' + cutLimits + clipParams + \
-                            northFullname + ' ' + os.path.join(tileDir, tempName0)
-        if (debug):
-            logger.info('        north0: {0}'.format(warpCmd))
-        try:
-            returnValue = call(warpCmd, shell=True)
-        except:
-            logger.error('Error: warpCmd - 3 contributing scenes - north')
-            logger.error('        Error: {0}'.format(traceback.format_exc()))
-            return 'ERROR'
-
-                                                    # Middle - Clip 2nd only
-        tempName1 = baseName + '_mid.tif'
-        warpCmd = gdalwarpLoc + ' -te ' + cutLimits + clipParams + \
-                            midFullname + ' ' + os.path.join(tileDir, tempName1)
-        if (debug):
-            logger.info('        mid0: {0}'.format(warpCmd))
-        try:
-            returnValue = call(warpCmd, shell=True)
-        except:
-            logger.error('Error: warpCmd - 2 contributing scenes - middle')
-            logger.error('        Error: {0}'.format(traceback.format_exc()))
-            return 'ERROR'
-
-                                                    # South - Clip 3rd only
-        tempName2 = baseName + '_s0.tif'
-        warpCmd = gdalwarpLoc + ' -te ' + cutLimits + clipParams + \
-                            southFullname + ' ' + os.path.join(tileDir, tempName2)
-        if (debug):
-            logger.info('        south0: {0}'.format(warpCmd))
-        try:
-            returnValue = call(warpCmd, shell=True)
-        except:
-            logger.error('Error: warpCmd - 2 contributing scenes - south')
-            logger.error('        Error: {0}'.format(traceback.format_exc()))
-            return 'ERROR'
-
-                                                    # mosaic
-        clipParams = '-co "compress=deflate" -co "zlevel=9" -co "tiled=yes" -co "predictor=2" '
-        mosaicFileName = baseName + '.tif'
-        warpCmd = gdalwarpLoc + ' ' + clipParams + os.path.join(tileDir, tempName2) + ' ' + \
-                            os.path.join(tileDir, tempName1) + ' ' + os.path.join(tileDir, tempName0) + \
-                            ' ' + os.path.join(tileDir, mosaicFileName)
-        if (debug):
-            logger.info('        mosaic: {0}'.format(warpCmd))
-        try:
-            returnValue = call(warpCmd, shell=True)
-        except:
-            logger.error('Error: warpCmd - 2 contributing scenes - mosaic')
-            logger.error('        Error: {0}'.format(traceback.format_exc()))
-            return 'ERROR'
-
-    if (curBand == 'pixel_qa'):
-        pqaTileStart = os.path.join(tileDir, mosaicFileName)
-        pqaCirrusMask = pqaTileStart.replace('PIXELQA', 'pqaCirrusMask')
-        pqaLowerBits = pqaTileStart.replace('PIXELQA', 'pqaLowerBits')
-        pqaCloudMask = pqaTileStart.replace('PIXELQA', 'pqaCloudMask')
-        pqaCloudCirrusMask = pqaTileStart.replace('PIXELQA', 'pqaCloudCirrusMask')
-        histCloudCirrus = os.path.join(tileDir, 'histCloudCirrus.json')
-        histLowerBits = os.path.join(tileDir, 'histLowerBits.json')
-
-    if curBand in bands_for_toa:
-        toaFinishedList.append(mosaicFileName)
-
-    if curBand in bands_for_sr:
-        srFinishedList.append(mosaicFileName)
-
-    if curBand in bands_for_bt:
-        btFinishedList.append(mosaicFileName)
-
-    if curBand in bands_for_pqa:
-        qaFinishedList.append(mosaicFileName)
-
-    if curBand in bands_for_swater:
-        swFinishedList.append(mosaicFileName)
-
-    if curBand in bands_for_stemp:
-        stFinishedList.append(mosaicFileName)
-
-    logger.info('    End processing for: {0}'.format(curBand))
+    logger.info('    End processing for %s as %s ', band_name, mosaic_filename)
+    if not os.path.exists(mosaic_filename):
+        logger.error('Processing failed to generate desired output: %s', mosaic_filename)
+    return mosaic_filename
 
 
+def process_bandtype_5(stacking, band_name, clip_extents, tile_id, rename, workdir):
+    """ Band Type 5 DSWE NoData Convert from 255 to -9999 """
+    logger.info('     Start processing for band: %s', band_name)
 
-def process_lineage():
+    mosaic_filename =  os.path.join(workdir, tile_id, tile_id + '_' + rename + '.tif')
+
+    if os.path.exists(mosaic_filename):
+        logger.warning("Skip previously generated result %s", mosaic_filename)
+        return mosaic_filename
+
+    warp_cmd = 'gdalwarp -te ' + clip_extents
+    clip_params = ' -dstnodata "-9999" -srcnodata "255" '
+
+    temp_names = list()
+    for level, stack in stacking.items():
+        temp_name =  os.path.join(workdir, tile_id, tile_id + '_temp%d' % level + '.tif')
+        scene_name = util.ffind(workdir, stack['LANDSAT_PRODUCT_ID'], '*' + band_name + '.tif')
+        temp_warp_cmd = warp_cmd + ' ' + clip_params +  scene_name + ' ' + temp_name
+        util.execute_cmd(temp_warp_cmd)
+        temp_names.append(temp_name)
+
+    warp_cmd = 'gdalwarp -co "compress=deflate" -co "zlevel=9" -co "tiled=yes" -co "predictor=2" '
+    warp_cmd += ' '.join(temp_names)
+    warp_cmd += ' ' + mosaic_filename
+    util.execute_cmd(warp_cmd)
+    util.remove(*temp_names)
+
+    logger.info('    End processing for %s as %s ', band_name, mosaic_filename)
+    if not os.path.exists(mosaic_filename):
+        logger.error('Processing failed to generate desired output: %s', mosaic_filename)
+    return mosaic_filename
+
+
+def process_lineage(stacking, band_name, clip_extents, tile_id, rename, workdir):
     """ Create the lineage file """
+    logger.info('     Start processing for band: %s', rename)
 
-    lineageFileName = tile_id + '_LINEAGEQA.tif'
+    lineage_filename = os.path.join(workdir, tile_id, tile_id + '_' + rename + '.tif')
 
+    if os.path.exists(lineage_filename):
+        logger.warning("Skip previously generated result %s", lineage_filename)
+        return lineage_filename
 
-    if (numScenesPerTile == 1):                                   # 1 contributing scene
+    temp_names = list()
+    for level, stack in stacking.items():
+        temp_name =  os.path.join(workdir, tile_id, tile_id + '_srcTemp%d' % level + '.tif')
+        scene_name = util.ffind(workdir, stack['LANDSAT_PRODUCT_ID'], '*' + band_name + '.tif')
 
-        calcExpression = ' --calc="' + str(stackA_Value) + ' * (A > -101)"'
-        lineageTempFullName = lineageFullName.replace('.tif', '_linTemp.tif')
+        calc_cmd = (
+            'gdal_calc.py -A {scene} --outfile {temp}'
+            ' --calc=" {level} * (A > -101)" --type="Byte" --NoDataValue=0'
+        )
+        util.execute_cmd(calc_cmd.format(level=level, temp=temp_name, scene=scene_name))
+        temp_names.append(temp_name)
 
-        lineageCmd = pythonLoc + ' ' + gdalcalcLoc + ' -A ' + lineage01Name + ' --outfile ' + \
-                                lineageTempFullName + calcExpression + ' --type="Byte" --NoDataValue=0'
-        if (debug):
-            logger.info('        mosaic lineage command: {0}'.format(lineageCmd))
-        try:
-            returnValue = call(lineageCmd, shell=True)
-        except:
-            logger.error('Error: calcCmd - 1 contributing scene')
-            logger.error('        Error: {0}'.format(traceback.format_exc()))
-            return 'ERROR'
+    warp_cmd = (
+        'gdalwarp -te {extents} -dstnodata "0" -srcnodata "0" -ot "Byte" -wt "Byte"'
+        ' -co "compress=deflate" -co "zlevel=9" -co "tiled=yes" -co "predictor=2" '
+    ).format(extents=clip_extents)
+    warp_cmd += ' '.join(temp_names)
+    warp_cmd += ' ' + lineage_filename
+    util.execute_cmd(warp_cmd)
+    util.remove(*temp_names)
 
-                                                                                # 1 contributing scene-  compress
-        clipParams = ' -co "compress=deflate" -co "zlevel=9" -co "tiled=yes" -co "predictor=2" '
-        warpCmd = gdalwarpLoc +  clipParams + lineageTempFullName + ' ' + lineageFullName
-        if (debug):
-            logger.info('        compress lineage command: {0}'.format(warpCmd))
-        try:
-            returnValue = call(warpCmd, shell=True)
-        except:
-            logger.error('Error: warpCmd - 1 contributing scene')
-            logger.error('        Error: {0}'.format(traceback.format_exc()))
-            return 'ERROR'
-
-    elif (numScenesPerTile == 2):                                      # 2 contributing scenes - north
-        northCalcExp = ' --calc="' + str(stackA_Value) + ' * (A > -101)"'
-        northTempName = lineageFullName.replace('.tif', '_srcTempN.tif')
-        northLineageCmd = pythonLoc + ' ' + gdalcalcLoc + ' -A ' + lineage01 + \
-                                        ' --outfile ' + northTempName + northCalcExp + \
-                                        ' --type="Byte" --NoDataValue=0'
-        if (debug):
-            logger.info('        north lineage conmmand: {0}'.format(northLineageCmd))
-        try:
-            returnValue = call(northLineageCmd, shell=True)
-        except:
-            logger.error('Error: warpCmd - 2 contributing scenes - north')
-            logger.error('        Error: {0}'.format(traceback.format_exc()))
-            return 'ERROR'
-
-                                                                            # 2 contributing scenes - south
-        southCalcExp = ' --calc="' + str(stackB_Value) + ' * (A > -101)"'
-        southTempName = lineageFullName.replace('.tif', '_srcTempS.tif')
-        southLineageCmd = pythonLoc + ' ' + gdalcalcLoc + ' -A ' + lineage02 + \
-                                        ' --outfile ' + southTempName + southCalcExp + \
-                                        ' --type="Byte" --NoDataValue=0'
-        if (debug):
-            logger.info('        south lineage conmmand: {0}'.format(southLineageCmd))
-        try:
-            returnValue = call(southLineageCmd, shell=True)
-        except:
-            logger.error('Error: warpCmd - 2 contributing scenes - south')
-            logger.error('        Error: {0}'.format(traceback.format_exc()))
-            return 'ERROR'
-
-                                                                            # 2 contributing scenes - mosaic North over South
-        clipParams = ' -dstnodata "0" -srcnodata "0" -ot "Byte" -wt "Byte" '
-        clipParams = clipParams + '-co "compress=deflate" -co "zlevel=9" -co "tiled=yes" -co "predictor=2" '
-        warpCmd = gdalwarpLoc + ' -te ' + cutLimits + clipParams + \
-                            southTempName + ' ' + northTempName + ' ' + lineageFullName
-        if (debug):
-            logger.info('        mosaic lineage command: {0}'.format(warpCmd))
-        try:
-            returnValue = call(warpCmd, shell=True)
-        except:
-            logger.error('Error: warpCmd - 2 contributing scenes - mosaic')
-            logger.error('        Error: {0}'.format(traceback.format_exc()))
-            return 'ERROR'
-
-    else:                                                         # 3 contributing scenes - north
-        northCalcExp = ' --calc="' + str(stackA_Value) + ' * (A > -101)"'
-        northTempName = lineageFullName.replace('.tif', '_srcTempN.tif')
-        northLineageCmd = pythonLoc + ' ' + gdalcalcLoc + ' -A ' + lineage01 + \
-                                        ' --outfile ' + northTempName + northCalcExp + \
-                                        ' --type="Byte" --NoDataValue=0'
-        if (debug):
-            logger.info('        north lineage conmmand: {0}'.format(northLineageCmd))
-        try:
-            returnValue = call(northLineageCmd, shell=True)
-        except:
-            logger.error('Error: warpCmd - 3 contributing scenes - north')
-            logger.error('        Error: {0}'.format(traceback.format_exc()))
-            return 'ERROR'
-
-                                                        # 3 contributing scenes - middle
-        midCalcExp = ' --calc="' + str(stackB_Value) + ' * (A > -101)"'
-        midTempName = lineageFullName.replace('.tif', '_srcTempM.tif')
-        midLineageCmd = pythonLoc + ' ' + gdalcalcLoc + ' -A ' + lineage02 + \
-                                    ' --outfile ' + midTempName + midCalcExp + \
-                                    ' --type="Byte" --NoDataValue=0'
-        if (debug):
-            logger.info('        middle lineage conmmand: {0}'.format(midLineageCmd))
-        try:
-            returnValue = call(midLineageCmd, shell=True)
-        except:
-            logger.error('Error: warpCmd - 3 contributing scenes - middle')
-            logger.error('        Error: {0}'.format(traceback.format_exc()))
-            return 'ERROR'
-
-                                                        # 3 contributing scenes - south
-        southCalcExp = ' --calc="' + str(stackC_Value) + ' * (A > -101)"'
-        southTempName = lineageFullName.replace('.tif', '_srcTempS.tif')
-        southLineageCmd = pythonLoc + ' ' + gdalcalcLoc + ' -A ' + lineage03 + \
-                                        ' --outfile ' + southTempName + southCalcExp + \
-                                        ' --type="Byte" --NoDataValue=0'
-        if (debug):
-            logger.info('        south lineage conmmand: {0}'.format(southLineageCmd))
-        try:
-            returnValue = call(southLineageCmd, shell=True)
-        except:
-            logger.error('Error: warpCmd - 3 contributing scenes - south')
-            logger.error('        Error: {0}'.format(traceback.format_exc()))
-            return 'ERROR'
-
-                                                        #  3 contributing scenes - mosaic North, Middle, South
-        clipParams = ' -dstnodata "0" -srcnodata "0" -ot "Byte" -wt "Byte" '
-        clipParams = clipParams + '-co "compress=deflate" -co "zlevel=9" -co "tiled=yes" -co "predictor=2" '
-        warpCmd = gdalwarpLoc + ' -te ' + cutLimits + clipParams + southTempName + \
-                            ' ' + midTempName + ' ' + northTempName + ' ' + lineageFullName
-        if (debug):
-            logger.info('        mosaic lineage command: {0}'.format(warpCmd))
-        try:
-            returnValue = call(warpCmd, shell=True)
-        except:
-            logger.error('Error: warpCmd - 3 contributing scenes - mosaic')
-            logger.error('        Error: {0}'.format(traceback.format_exc()))
-            return 'ERROR'
-
-    toaFinishedList.append(lineageFileName)
-    btFinishedList.append(lineageFileName)
-    srFinishedList.append(lineageFileName)
-    qaFinishedList.append(lineageFileName)
-    swFinishedList.append(lineageFileName)
-    stFinishedList.append(lineageFileName)
-
-    logger.info('    End building lineage file')
+    logger.info('    End processing for %s as %s ', band_name, lineage_filename)
+    if not os.path.exists(lineage_filename):
+        logger.error('Processing failed to generate desired output: %s', lineage_filename)
+    return lineage_filename
 
 
+def process_lineage_contributing(lineage_filename, n_contrib_scenes, tile_id, workdir):
     # --------------------------------------------------------------------------------------------------------------------------- #
     #
     #         Check to see how many "contributing" scenes were actually used.  We need this check because of the
@@ -798,93 +390,60 @@ def process_lineage():
 
     logger.info('    Start checking contributing scenes')
 
-    sceneHistFilename = os.path.join(tileDir, 'scenes.json')
+    info_cmd = 'gdalinfo -hist {}'
+    results = util.execute_cmd(info_cmd.format(lineage_filename))
+    util.remove(lineage_filename + '.aux.xml')  # TODO: could potentially use this instead...
+    count, array = geofuncs.parse_gdal_hist_output(results['output'])
 
-    sceneCmd = gdalinfoLoc + ' -hist ' + lineageFullName + ' >> ' + sceneHistFilename
-    if (debug):
-        logger.info('        > sceneCmd: {0}'.format(sceneCmd))
-    try:
-        returnValue = call(sceneCmd, shell=True)
-    except:
-        logger.error('Error: generating histogram from lineage file')
-        logger.error('        Error: {0}'.format(traceback.format_exc()))
-        return "ERROR"
-
-    contribSceneResults = parseSceneHistFile(sceneHistFilename)
-    contribSceneCount = contribSceneResults[0]
-    contribScenePixCountArray = contribSceneResults[1]
-
-    if (contribSceneCount == 0):
-        logger.error('Warning: parsing histogram from lineage file: 0 contributing scenes')
-        logger.error('        Error: {0}'.format(traceback.format_exc()))
-
+    if (count == 0):
+        logger.error('Parsing histogram from lineage file found 0 contributing scenes')
         # Insert tile into db and record it as "NOT NEEDED" i.e it's an empty tile
-        processingState = "NOT NEEDED"
+        return "NOT NEEDED"
 
-        completed_tile_list = []
-        sceneListStr = "none"
-        row = (tile_id,sceneListStr,complete_tile,processingState)
-        completed_tile_list.append(row)
-
-        db.insert_tile_record(db.connection(conf.connstr), completed_tile_list)
-
-        # Remove the temporary work directory
-        shutil.rmtree(tileDir)
-        return processingState
 
     # decrement pixel values in lineage file if some scenes didn't contribute
     # any pixels
-    if (contribSceneCount != numScenesPerTile):
+    if (count != n_contrib_scenes):
 
-        decrement_value = numScenesPerTile - contribSceneCount
+        decrement_value = n_contrib_scenes - count
         sceneCountDifference = decrement_value
 
         # Determine whether we need decrement the pixel values in the lineage file or not.
         calcExpression = ''
         if sceneCountDifference == 1:
-            if contribScenePixCountArray[0] == 0:
+            if array[0] == 0:
                 calcExpression = ' --calc="A-' + str(decrement_value) + '"'
-            elif contribScenePixCountArray[1] == 0 and contribScenePixCountArray[2] > 0:
+            elif array[1] == 0 and array[2] > 0:
                 calcExpression = ' --calc="A-(A==3)"'
         elif sceneCountDifference == 2:
-            if contribScenePixCountArray[0] == 0 and contribScenePixCountArray[1] == 0:
+            if array[0] == 0 and array[1] == 0:
                 calcExpression = ' --calc="A-' + str(decrement_value) + '"'
-            elif contribScenePixCountArray[0] == 0 and contribScenePixCountArray[2] == 0:
+            elif array[0] == 0 and array[2] == 0:
                 calcExpression = ' --calc="A-' + str(1) + '"'
 
         if calcExpression != '':
-            lineageTempFullName = lineageFullName.replace('.tif', '_linTemp.tif')
-
-            recalcCmd = pythonLoc + ' ' + gdalcalcLoc + ' -A ' + lineageFullName + ' --outfile ' + lineageTempFullName + calcExpression + ' --type="Byte" --NoDataValue=0 --overwrite'
-
-            logger.info('        recalc lineage command: {0}'.format(recalcCmd))
-
-            try:
-                returnValue = call(recalcCmd, shell=True)
-            except:
-                logger.error('Error: recalcCmd - recalculating pixels in Lineage file')
-                logger.error('        Error: {0}'.format(traceback.format_exc()))
-                return "ERROR"
+            temp_name = lineage_filename.replace('.tif', '_linTemp.tif')
+            calc_cmd = (
+                'gdal_calc.py -A {lineage} --outfile {temp} {calc} --type="Byte" --NoDataValue=0 --overwrite'
+            )
+            util.execute_cmd(calc_cmd.format(lineage=lineage_filename, temp=temp_name, calc=calcExpression))
 
             # compress
-            clipParams = ' -co "compress=deflate" -co "zlevel=9" -co "tiled=yes" -co "predictor=2" -overwrite '
-            warpCmd = gdalwarpLoc +  clipParams + lineageTempFullName + ' ' + lineageFullName
-            if (debug):
-                logger.info('        compress lineage recalc command: {0}'.format(warpCmd))
-            try:
-                returnValue = call(warpCmd, shell=True)
-            except:
-                logger.error('Error: warpCmd - compressing lineage recalc')
-                logger.error('        Error: {0}'.format(traceback.format_exc()))
-                return "ERROR"
+            warp_cmd = (
+                'gdalwarp -co "compress=deflate" -co "zlevel=9" -co "tiled=yes" -co "predictor=2"'
+                ' -overwrite {} {}'
+            )
+            util.execute_cmd(warp_cmd.format(temp_name, lineage_filename))
+            util.remove(temp_name)
 
     logger.info('finish updating contributing scenes')
+    return count, array
 
 
-def process_bandtype_5():
+def process_bandtype_6(stacking, band_name, clip_extents, tile_id, rename, workdir):
     # --------------------------------------------------------------------------------------------------------------------------- #
     #
-    #     Band Type 5
+    #     Band Type 6
     #
     #		8 bit unsigned integer
     #         	NoData is not set
@@ -895,563 +454,230 @@ def process_bandtype_5():
     #                   we will use the lineage file to specify which pixels from these bands are derived from the
     #                   various input scenes.
     #
+    logger.info('     Start processing for band: %s', band_name)
 
-    logger.info('    Start processing for: {0}'.format(curBand))
+    mosaic_filename =  os.path.join(workdir, tile_id, tile_id + '_' + rename + '.tif')
 
-    newARDname = getARDName(curBand, filenameCrosswalk)
-    if (newARDname == 'ERROR'):
-        logger.error('Error in filenameCrosswalk for: {0}'.format(curBand))
-        return "ERROR"
-    baseName = tile_id + '_' + newARDname
-
-                                                        #
-                                                        # Only 1 contributing scene
-                                                        #
-                                                        # Perform a simple clip and then
-                                                        # reassign any NoData back to zero
-                                                        #
-    if (contribSceneCount == 1):
-        if contribScenePixCountArray[0] > 0:
-            inputFileName = stackA_Prefix + '_' + curBand + '.tif'
-            inputFullName = os.path.join(stackA_Dir, inputFileName)
-        elif contribScenePixCountArray[1] > 0:
-            inputFileName = stackB_Prefix + '_' + curBand + '.tif'
-            inputFullName = os.path.join(stackB_Dir, inputFileName)
-        elif contribScenePixCountArray[2] > 0:
-            inputFileName = stackC_Prefix + '_' + curBand + '.tif'
-            inputFullName = os.path.join(stackC_Dir, inputFileName)
-
-        clipParams = ' -dstnodata "0" -ot "Byte" -wt "Byte" '
-
-                                                    # Clip to fill entire tile
-        tempFileName =  baseName + '_m0.tif'
-        tempFullName = os.path.join(tileDir, tempFileName)
-        warpCmd = gdalwarpLoc + ' -te ' + cutLimits + clipParams + inputFullName + ' ' + tempFullName
-        if (debug):
-            logger.info('        mosaic: {0}'.format(warpCmd))
-        try:
-            returnValue = call(warpCmd, shell=True)
-        except:
-            logger.error('Error: warpCmd - 1 contributing scene')
-            logger.error('        Error: {0}'.format(traceback.format_exc()))
-            return 'ERROR'
-
-                                                    # reassign nodata & compress
-        clipParams = ' -dstnodata "None" -srcnodata "256" '
-        clipParams = clipParams + '-co "compress=deflate" -co "zlevel=9" -co "tiled=yes" -co "predictor=2" '
-        mosaicFileName = baseName + '.tif'
-        mosaicFullName = os.path.join(tileDir, mosaicFileName)
-        warpCmd = gdalwarpLoc + clipParams + tempFullName + ' ' + mosaicFullName
-        if (debug):
-            logger.info('        nodata: {0}'.format(warpCmd))
-        try:
-            returnValue = call(warpCmd, shell=True)
-        except:
-            logger.error('Error: warpCmd - nodata')
-            logger.error('        Error: {0}'.format(traceback.format_exc()))
-            return 'ERROR'
-
-                                                        #
-                                                        # 2 contributing scenes
-                                                        #
-                                                        # Since there is no real NoData value in the source
-                                                        # scenes, we can't overlay the Northern scene on
-                                                        # top of the Southern scene without obscuring
-                                                        # pixels in the overlap area.
-                                                        #
-                                                        # We will use the newly created lineage tile to mask
-                                                        # only those pixels we want for each contributing
-                                                        # scene.  Then we can re-combine the results of the
-                                                        # two mask operations.
-                                                        #
-
-    elif (contribSceneCount == 2):
-        if contribScenePixCountArray[0] > 0 and contribScenePixCountArray[1] > 0:
-            northFilename = stackA_Prefix + '_' + curBand + '.tif'
-            southFilename = stackB_Prefix + '_' + curBand + '.tif'
-
-            northFullname = os.path.join(stackA_Dir, northFilename)
-            southFullname = os.path.join(stackB_Dir, southFilename)
-        elif contribScenePixCountArray[0] > 0 and contribScenePixCountArray[2] > 0:
-            northFilename = stackA_Prefix + '_' + curBand + '.tif'
-            southFilename = stackC_Prefix + '_' + curBand + '.tif'
-
-            northFullname = os.path.join(stackA_Dir, northFilename)
-            southFullname = os.path.join(stackC_Dir, southFilename)
-        elif contribScenePixCountArray[1] > 0 and contribScenePixCountArray[2] > 0:
-            northFilename = stackB_Prefix + '_' + curBand + '.tif'
-            southFilename = stackC_Prefix + '_' + curBand + '.tif'
-
-            northFullname = os.path.join(stackB_Dir, northFilename)
-            southFullname = os.path.join(stackC_Dir, southFilename)
-
-        clipParams = ' -dstnodata "0" -ot "Byte" -wt "Byte" '
-
-                                                    # North - Clip to fill entire tile
-        clipFileNameN =  baseName + '_n0.tif'
-        clipFullNameN = os.path.join(tileDir, clipFileNameN)
-        warpCmd = gdalwarpLoc + ' -te ' + cutLimits + clipParams + \
-                            northFullname + ' ' + clipFullNameN
-        if (debug):
-            logger.info('        north0: {0}'.format(warpCmd))
-        try:
-            returnValue = call(warpCmd, shell=True)
-        except:
-            logger.error('Error: warpCmd - 2 contributing scenes - north')
-            logger.error('        Error: {0}'.format(traceback.format_exc()))
-            return 'ERROR'
-
-                                                    # South - Clip 2nd only
-        clipFileNameS = baseName + '_s0.tif'
-        clipFullNameS = os.path.join(tileDir, clipFileNameS)
-        warpCmd = gdalwarpLoc + ' -te ' + cutLimits + clipParams + \
-                            southFullname + ' ' + clipFullNameS
-        if (debug):
-            logger.info('        south0: {0}'.format(warpCmd))
-        try:
-            returnValue = call(warpCmd, shell=True)
-        except:
-            logger.error('Error: warpCmd - 2 contributing scenes - south')
-            logger.error('        Error: {0}'.format(traceback.format_exc()))
-            return 'ERROR'
-
-                                                # Mask the North using the lineage file
-        maskNameN = baseName + '_n0mask.tif'
-        maskFullNameN = os.path.join(tileDir, maskNameN)
-        calcExpression = ' --calc="A*(B==1)"'
-        maskCmd = pythonLoc + ' ' + gdalcalcLoc + ' -A ' + clipFullNameN + \
-                            ' -B ' + lineageFullName + ' --outfile ' + maskFullNameN + \
-                            calcExpression + ' --type="Byte" --NoDataValue=0'
-        if (debug):
-            logger.info('        north mask: {0}'.format(maskCmd))
-        try:
-            returnValue = call(maskCmd, shell=True)
-        except:
-            logger.error('Error: maskCmd - 2 contributing scenes - north')
-            logger.error('        Error: {0}'.format(traceback.format_exc()))
-            return 'ERROR'
-
-                                                # Mask the South using the lineage file
-        maskNameS = baseName + '_s0mask.tif'
-        maskFullNameS = os.path.join(tileDir, maskNameS)
-        calcExpression = ' --calc="A*(B==2)"'
-        maskCmd = pythonLoc + ' ' + gdalcalcLoc + ' -A ' + clipFullNameS + \
-                            ' -B ' + lineageFullName + ' --outfile ' + maskFullNameS + \
-                            calcExpression + ' --type="Byte" --NoDataValue=0'
-        if (debug):
-            logger.info('        south mask: {0}'.format(maskCmd))
-        try:
-            returnValue = call(maskCmd, shell=True)
-        except:
-            logger.error('Error: maskCmd - 2 contributing scenes - south')
-            logger.error('        Error: {0}'.format(traceback.format_exc()))
-            return 'ERROR'
-
-                                                    # mosaic
-        tempFileName =  baseName + '_m0.tif'
-        tempFullName = os.path.join(tileDir, tempFileName)
-        warpCmd = gdalwarpLoc + ' ' +  maskFullNameS + ' ' + \
-                            maskFullNameN + ' ' + tempFullName
-        if (debug):
-            logger.info('        mosaic: {0}'.format(warpCmd))
-        try:
-            returnValue = call(warpCmd, shell=True)
-        except:
-            logger.error('Error: warpCmd - 2 contributing scenes - mosaic')
-            logger.error('        Error: {0}'.format(traceback.format_exc()))
-            return 'ERROR'
-
-                                                # reassign nodata & compress
-        clipParams = ' -dstnodata "None" -srcnodata "256" '
-        clipParams = clipParams + '-co "compress=deflate" -co "zlevel=9" -co "tiled=yes" -co "predictor=2" '
-        mosaicFileName = baseName + '.tif'
-        mosaicFullName = os.path.join(tileDir, mosaicFileName)
-        warpCmd = gdalwarpLoc + clipParams + tempFullName + ' ' + mosaicFullName
-        if (debug):
-            logger.info('        nodata: {0}'.format(warpCmd))
-        try:
-            returnValue = call(warpCmd, shell=True)
-        except:
-            logger.error('Error: warpCmd - nodata')
-            logger.error('        Error: {0}'.format(traceback.format_exc()))
-            return 'ERROR'
-
-                                                        #
-                                                        # 3 contributing scenes
-                                                        #
-                                                        # Since there is no real NoData value in the source
-                                                        # scenes, we can't overlay the Northern scene on
-                                                        # top of the Southern scenes without obscuring
-                                                        # pixels in the overlap area.
-                                                        #
-                                                        # We will use the newly created lineage tile to mask
-                                                        # only those pixels we want for each contributing
-                                                        # scene.  Then we can re-combine the results of the
-                                                        # three mask operations.
-                                                        #
-
-    else:
-        northFilename = stackA_Prefix + '_' + curBand + '.tif'
-        midFilename = stackB_Prefix + '_' + curBand + '.tif'
-        southFilename = stackC_Prefix + '_' + curBand + '.tif'
-
-        northFullname = os.path.join(stackA_Dir, northFilename)
-        midFullname = os.path.join(stackB_Dir, midFilename)
-        southFullname = os.path.join(stackC_Dir, southFilename)
-
-        clipParams = ' -dstnodata "0" -ot "Byte" -wt "Byte" '
-
-                                                    # North - Clip to fill entire tile
-        clipFileNameN =  baseName + '_n0.tif'
-        clipFullNameN = os.path.join(tileDir, clipFileNameN)
-        warpCmd = gdalwarpLoc + ' -te ' + cutLimits + clipParams + \
-                            northFullname + ' ' + clipFullNameN
-        if (debug):
-            logger.info('        north0: {0}'.format(warpCmd))
-        try:
-            returnValue = call(warpCmd, shell=True)
-        except:
-            logger.error('Error: warpCmd - 3 contributing scenes - north')
-            logger.error('        Error: {0}'.format(traceback.format_exc()))
-            return 'ERROR'
-
-                                                    # Mid - Clip 2nd only
-        clipFileNameM =  baseName + '_mid.tif'
-        clipFullNameM = os.path.join(tileDir, clipFileNameM)
-        warpCmd = gdalwarpLoc + ' -te ' + cutLimits + clipParams + \
-                midFullname + ' ' + clipFullNameM
-        if (debug):
-            logger.info('        mid0: {0}'.format(warpCmd))
-        try:
-            returnValue = call(warpCmd, shell=True)
-        except:
-            logger.error('Error: warpCmd - 3 contributing scenes - middle')
-            logger.error('        Error: {0}'.format(traceback.format_exc()))
-            return 'ERROR'
-
-                                                    # South - Clip 3rd only
-        clipFileNameS = baseName + '_s0.tif'
-        clipFullNameS = os.path.join(tileDir, clipFileNameS)
-        warpCmd = gdalwarpLoc + ' -te ' + cutLimits + clipParams + \
-                            southFullname + ' ' + clipFullNameS
-        if (debug):
-            logger.info('        south0: {0}'.format(warpCmd))
-        try:
-            returnValue = call(warpCmd, shell=True)
-        except:
-            logger.error('Error: warpCmd - 3 contributing scenes - south')
-            logger.error('        Error: {0}'.format(traceback.format_exc()))
-            return 'ERROR'
-
-                                                # Mask the North using the lineage file
-        maskNameN = baseName + '_n0mask.tif'
-        maskFullNameN = os.path.join(tileDir, maskNameN)
-        calcExpression = ' --calc="A*(B==1)"'
-        maskCmd = pythonLoc + ' ' + gdalcalcLoc + ' -A ' + clipFullNameN + \
-                            ' -B ' + lineageFullName + ' --outfile ' + maskFullNameN + \
-                            calcExpression + ' --type="Byte" --NoDataValue=0'
-        if (debug):
-            logger.info('        north mask: {0}'.format(maskCmd))
-        try:
-            returnValue = call(maskCmd, shell=True)
-        except:
-            logger.error('Error: maskCmd - 3 contributing scenes - north')
-            logger.error('        Error: {0}'.format(traceback.format_exc()))
-            return 'ERROR'
-
-                                                # Mask the Middle using the lineage file
-        maskNameM = baseName + '_midmask.tif'
-        maskFullNameM = os.path.join(tileDir, maskNameM)
-        calcExpression = ' --calc="A*(B==2)"'
-        maskCmd = pythonLoc + ' ' + gdalcalcLoc + ' -A ' + clipFullNameM + \
-                            ' -B ' + lineageFullName + ' --outfile ' + maskFullNameM + \
-                            calcExpression + ' --type="Byte" --NoDataValue=0'
-        if (debug):
-            logger.info('        middle mask: {0}'.format(maskCmd))
-        try:
-            returnValue = call(maskCmd, shell=True)
-        except:
-            logger.error('Error: maskCmd - 3 contributing scenes - middle')
-            logger.error('        Error: {0}'.format(traceback.format_exc()))
-            return 'ERROR'
-
-                                                # Mask the South using the lineage file
-        maskNameS = baseName + '_s0mask.tif'
-        maskFullNameS = os.path.join(tileDir, maskNameS)
-        calcExpression = ' --calc="A*(B==3)"'
-        maskCmd = pythonLoc + ' ' + gdalcalcLoc + ' -A ' + clipFullNameS + \
-                            ' -B ' + lineageFullName + ' --outfile ' + maskFullNameS + \
-                            calcExpression + ' --type="Byte" --NoDataValue=0'
-        if (debug):
-            logger.info('        south mask: {0}'.format(maskCmd))
-        try:
-            returnValue = call(maskCmd, shell=True)
-        except:
-            logger.error('Error: maskCmd - 3 contributing scenes - south')
-            logger.error('        Error: {0}'.format(traceback.format_exc()))
-            return 'ERROR'
-
-                                                    # mosaic
-        tempFileName =  baseName + '_m0.tif'
-        tempFullName = os.path.join(tileDir, tempFileName)
-        warpCmd = gdalwarpLoc + ' ' + maskFullNameS + ' ' + maskFullNameM + \
-                            ' ' + maskFullNameN + ' ' + tempFullName
-        if (debug):
-            logger.info('        mosaic: {0}'.format(warpCmd))
-        try:
-            returnValue = call(warpCmd, shell=True)
-        except:
-            logger.error('Error: warpCmd - 3 contributing scenes - mosaic')
-            logger.error('        Error: {0}'.format(traceback.format_exc()))
-            return 'ERROR'
-
-                                                    # reassign nodata
-        clipParams = ' -dstnodata "None" -srcnodata "256" '
-        clipParams = clipParams + '-co "compress=deflate" -co "zlevel=9" -co "tiled=yes" -co "predictor=2" '
-        mosaicFileName = baseName + '.tif'
-        mosaicFullName = os.path.join(tileDir, mosaicFileName)
-        warpCmd = gdalwarpLoc + clipParams + tempFullName + ' ' + mosaicFullName
-        if (debug):
-            logger.info('        nodata: {0}'.format(warpCmd))
-        try:
-            returnValue = call(warpCmd, shell=True)
-        except:
-            logger.error('Error: warpCmd - nodata')
-            logger.error('        Error: {0}'.format(traceback.format_exc()))
-            return 'ERROR'
+    if os.path.exists(mosaic_filename):
+        logger.warning("Skip previously generated result %s", mosaic_filename)
+        return mosaic_filename
 
 
-    if curBand in bands_for_toa:
-        toaFinishedList.append(mosaicFileName)
+    temp_clipped_names = list()
+    temp_masked_names = list()
+    for level, stack in stacking.items():
+        scene_name = util.ffind(workdir, stack['LANDSAT_PRODUCT_ID'], '*' + band_name + '.tif')
+        lineg_name = util.ffind(workdir, tile_id, '*LINEAGEQA.tif')
 
-    if curBand in bands_for_sr:
-        srFinishedList.append(mosaicFileName)
+        temp_name1 =  os.path.join(workdir, tile_id, tile_id + '_temp%d' % level + '.tif')
+        temp_warp_cmd = 'gdalwarp -te {extents} -dstnodata "0" -ot "Byte" -wt "Byte" {0} {1}'
+        util.execute_cmd(temp_warp_cmd.format(scene_name, temp_name1, extents=clip_extents))
+        temp_clipped_names.append(temp_name1)
 
-    if curBand in bands_for_bt:
-        btFinishedList.append(mosaicFileName)
+        temp_name2 =  os.path.join(workdir, tile_id, tile_id + '_temp%dM' % level + '.tif')
+        temp_calc_cmd = (
+            'gdal_calc.py -A {0} -B {lineage} --outfile {1} --calc="A*(B=={level})" '
+            '--type="Byte" --NoDataValue=0'
+        )
+        util.execute_cmd(temp_calc_cmd.format(temp_name1, temp_name2, lineage=lineg_name, level=level))
+        temp_masked_names.append(temp_name2)
 
-    if curBand in bands_for_pqa:
-        qaFinishedList.append(mosaicFileName)
+    temp_name =  os.path.join(workdir, tile_id, tile_id + '_temp.tif')
+    temp_warp_cmd = 'gdalwarp {} {}'.format(' '.join(temp_masked_names), temp_name)
+    util.execute_cmd(temp_warp_cmd)
+    util.remove(*temp_masked_names + temp_clipped_names)
 
-    if curBand in bands_for_swater:
-        swFinishedList.append(mosaicFileName)
+    warp_cmd = (
+        'gdalwarp -dstnodata "None" -srcnodata "256" -co "compress=deflate"'
+        ' -co "zlevel=9" -co "tiled=yes" -co "predictor=2" {} {}'
+    )
+    util.execute_cmd(warp_cmd.format(temp_name, mosaic_filename))
+    util.remove(temp_name)
 
-    if curBand in bands_for_stemp:
-        stFinishedList.append(mosaicFileName)
+    logger.info('    End processing for %s as %s ', band_name, mosaic_filename)
+    if not os.path.exists(mosaic_filename):
+        logger.error('Processing failed to generate desired output: %s', mosaic_filename)
+    return mosaic_filename
 
-    logger.info('    End processing for: {0}'.format(curBand))
+
+def process_bandtype_7(stacking, band_name, clip_extents, tile_id, rename, workdir):
+    """ Band Type 7 NoData 255 and uses LINEAGE """
+
+    logger.info('     Start processing for band: %s', band_name)
+
+    mosaic_filename =  os.path.join(workdir, tile_id, tile_id + '_' + rename + '.tif')
+
+    if os.path.exists(mosaic_filename):
+        logger.warning("Skip previously generated result %s", mosaic_filename)
+        return mosaic_filename
+
+    temp_clipped_names = list()
+    temp_masked_names = list()
+    for level, stack in stacking.items():
+        scene_name = util.ffind(workdir, stack['LANDSAT_PRODUCT_ID'], '*' + band_name + '.tif')
+
+        temp_name1 =  os.path.join(workdir, tile_id, tile_id + '_temp%d' % level + '.tif')
+        temp_warp_cmd = 'gdalwarp -te {extents} -dstnodata "1" -srcnodata "1"  {0} {1}'
+        util.execute_cmd(temp_warp_cmd.format(scene_name, temp_name1, extents=clip_extents))
+        temp_clipped_names.append(temp_name1)
+
+        lineg_name = util.ffind(workdir, tile_id, '*LINEAGEQA.tif')
+        temp_name2 =  os.path.join(workdir, tile_id, tile_id + '_temp%dM' % level + '.tif')
+        temp_calc_cmd = (
+            'gdal_calc.py -A {0} -B {lineage} --outfile {1} --calc="A*(B=={level})" '
+            ' --NoDataValue=1'
+        )
+        util.execute_cmd(temp_calc_cmd.format(temp_name1, temp_name2, lineage=lineg_name, level=level))
+        temp_masked_names.append(temp_name2)
+
+    temp_name =  os.path.join(workdir, tile_id, tile_id + '_temp.tif')
+    temp_warp_cmd = 'gdalwarp {} {}'.format(' '.join(temp_masked_names), temp_name)
+    util.execute_cmd(temp_warp_cmd)
+    util.remove(*temp_masked_names + temp_clipped_names)
+
+    warp_cmd = (
+        'gdalwarp -dstnodata "1" -srcnodata "1" -co "compress=deflate"'
+        ' -co "zlevel=9" -co "tiled=yes" -co "predictor=2" {} {}'
+    )
+    util.execute_cmd(warp_cmd.format(temp_name, mosaic_filename))
+    util.remove(temp_name)
+
+    logger.info('    End processing for %s as %s ', band_name, mosaic_filename)
+    if not os.path.exists(mosaic_filename):
+        logger.error('Processing failed to generate desired output: %s', mosaic_filename)
+    return mosaic_filename
 
 
-def process_metadata():
+def process_bandtype_8(stacking, band_name, clip_extents, tile_id, rename, workdir):
+    """ Band Type 8 NoData -9999 and uses LINEAGE """
+
+    logger.info('     Start processing for band: %s', band_name)
+
+    mosaic_filename =  os.path.join(workdir, tile_id, tile_id + '_' + rename + '.tif')
+
+    if os.path.exists(mosaic_filename):
+        logger.warning("Skip previously generated result %s", mosaic_filename)
+        return mosaic_filename
+
+    temp_clipped_names = list()
+    temp_masked_names = list()
+    for level, stack in stacking.items():
+        scene_name = util.ffind(workdir, stack['LANDSAT_PRODUCT_ID'], '*' + band_name + '.tif')
+
+        temp_name1 =  os.path.join(workdir, tile_id, tile_id + '_temp%d' % level + '.tif')
+        temp_warp_cmd = 'gdalwarp -te {extents} -dstnodata "-9999" -srcnodata "-9999"  {0} {1}'
+        util.execute_cmd(temp_warp_cmd.format(scene_name, temp_name1, extents=clip_extents))
+        temp_clipped_names.append(temp_name1)
+
+        lineg_name = util.ffind(workdir, tile_id, '*LINEAGEQA.tif')
+        temp_name2 =  os.path.join(workdir, tile_id, tile_id + '_temp%dM' % level + '.tif')
+        temp_calc_cmd = (
+            'gdal_calc.py -A {0} -B {lineage} --outfile {1} --calc="A*(B=={level})" '
+            ' --NoDataValue=-9999'
+        )
+        util.execute_cmd(temp_calc_cmd.format(temp_name1, temp_name2, lineage=lineg_name, level=level))
+        temp_masked_names.append(temp_name2)
+
+    temp_name =  os.path.join(workdir, tile_id, tile_id + '_temp.tif')
+    temp_warp_cmd = 'gdalwarp {} {}'.format(' '.join(temp_masked_names), temp_name)
+    util.execute_cmd(temp_warp_cmd)
+    util.remove(*temp_masked_names + temp_clipped_names)
+
+    warp_cmd = (
+        'gdalwarp -dstnodata "-9999" -srcnodata "-9999" -co "compress=deflate"'
+        ' -co "zlevel=9" -co "tiled=yes" -co "predictor=2" {} {}'
+    )
+    util.execute_cmd(warp_cmd.format(temp_name, mosaic_filename))
+    util.remove(temp_name)
+
+    logger.info('    End processing for %s as %s ', band_name, mosaic_filename)
+    if not os.path.exists(mosaic_filename):
+        logger.error('Processing failed to generate desired output: %s', mosaic_filename)
+    return mosaic_filename
+
+
+def process_metadata(segment, stacking, tile_id, clip_extents, region, lng_count, lng_array,
+                     production_timestamp, tiled_filenames, workdir):
     """ Create the tile metadata file, Generate statistics we will need """
 
-    statsTupleBits = raster_value_count(pqaTileStart, True)
-    if (len(statsTupleBits) == 1):
-        logger.error('        Error {0} pixel counts.'.format(pqaTileStart))
-        return "ERROR"
+    logger.info('     Start processing for metadata')
+    metadata_filename =  os.path.join(workdir, tile_id, tile_id + '.xml')
+
+    if os.path.exists(metadata_filename):
+        logger.warning("Skip previously generated result %s", metadata_filename)
+        return metadata_filename
+
+    pqa_name = util.ffind(workdir, tile_id, '*PIXELQA.tif')
+    bit_counts = geofuncs.raster_value_count(pqa_name, tile_id)
+
+    metadata_locs = list()
+    for n_count, (level, stack) in zip(lng_array, stacking.items()):
+        metadata_locs.append({
+            'L2XML': util.ffind(workdir, stack['LANDSAT_PRODUCT_ID'], "*.xml"),
+            'L1MTL': util.ffind(workdir, stack['LANDSAT_PRODUCT_ID'], '*_MTL.txt'),
+        })
+
+    buildMetadata(metadata_filename, bit_counts, clip_extents, tile_id, metadata_locs,
+                  production_timestamp, tiled_filenames, segment, region, lng_count)
+
+    util.make_file_group_writeable(metadata_filename)
+    logger.info('    End processing for metadata as %s ', metadata_filename)
+    if not os.path.exists(metadata_filename):
+        logger.error('Processing failed to generate desired output: %s', metadata_filename)
+    return metadata_filename
 
 
-                                            # Gather pixel counts
-                                            #
-    countFill = statsTupleBits[0]
-    countClear = statsTupleBits[1]
-    countWater = statsTupleBits[2]
-    countShadow = statsTupleBits[3]
-    countSnow = statsTupleBits[4]
-    countCloud = statsTupleBits[5]
-    countCirrus = statsTupleBits[6]
-    countTerrain = statsTupleBits[7]
 
-    if (debug):
-        logger.info('        # pixels Fill: {0}'.format(str(countFill)))
-        logger.info('        # pixels Clear: {0}'.format(str(countClear)))
-        logger.info('        # pixels Water: {0}'.format(str(countWater)))
-        logger.info('        # pixels Snow: {0}'.format(str(countSnow)))
-        logger.info('        # pixels CloudShadow: {0}'.format(str(countShadow)))
-        logger.info('        # pixels CloudCover: {0}'.format(str(countCloud)))
-        logger.info('        # pixels Cirrus: {0}'.format(str(countCirrus)))
-        logger.info('        # pixels Terrain: {0}'.format(str(countTerrain)))
-
-                                            # Build a new tuple to hold the pixel counts
-    statsTupleCombo = (countFill, countClear, countWater, countSnow, countShadow,
-                        countCloud, countCirrus, countTerrain)
-
-
-    L2Scene01MetaFileName = ''
-    L1Scene01MetaFileName = ''
-    L1Scene01MetaString = ''
-
-    L2Scene02MetaFileName = ''
-    L1Scene02MetaFileName = ''
-    L1Scene02MetaString = ''
-
-    L2Scene03MetaFileName = ''
-    L1Scene03MetaFileName = ''
-    L1Scene03MetaString = ''
-
-    if contribScenePixCountArray[0] > 0:
-        L2Scene01MetaFileName = os.path.join(stackA_Dir, stackA_Prefix + ".xml")
-        L1Scene01MetaFileName = os.path.join(stackA_Dir, stackA_Prefix + "_MTL.txt")
-        L1Scene01MetaString = makeMetadataString(L1Scene01MetaFileName)
-
-    if contribScenePixCountArray[1] > 0:
-        if L2Scene01MetaFileName == '':
-            L2Scene01MetaFileName = os.path.join(stackB_Dir, stackB_Prefix + ".xml")
-            L1Scene01MetaFileName = os.path.join(stackB_Dir, stackB_Prefix + "_MTL.txt")
-            L1Scene01MetaString = makeMetadataString(L1Scene01MetaFileName)
-        else:
-
-            L2Scene02MetaFileName = os.path.join(stackB_Dir, stackB_Prefix + ".xml")
-            L1Scene02MetaFileName = os.path.join(stackB_Dir, stackB_Prefix + "_MTL.txt")
-            L1Scene02MetaString = makeMetadataString(L1Scene02MetaFileName)
-
-    if contribScenePixCountArray[2] > 0:
-        if L2Scene01MetaFileName == '':
-            L2Scene01MetaFileName = os.path.join(stackC_Dir, stackC_Prefix + ".xml")
-            L1Scene01MetaFileName = os.path.join(stackC_Dir, stackC_Prefix + "_MTL.txt")
-            L1Scene01MetaString = makeMetadataString(L1Scene01MetaFileName)
-        elif L2Scene02MetaFileName == '':
-            L2Scene02MetaFileName = os.path.join(stackC_Dir, stackC_Prefix + ".xml")
-            L1Scene02MetaFileName = os.path.join(stackC_Dir, stackC_Prefix + "_MTL.txt")
-            L1Scene02MetaString = makeMetadataString(L1Scene02MetaFileName)
-        else:
-            L2Scene03MetaFileName = os.path.join(stackC_Dir, stackC_Prefix + ".xml")
-            L1Scene03MetaFileName = os.path.join(stackC_Dir, stackC_Prefix + "_MTL.txt")
-            L1Scene03MetaString = makeMetadataString(L1Scene03MetaFileName)
-
-    metaFileName = tile_id + ".xml"
-    metaFullName = os.path.join(tileDir, metaFileName)
-
-    metaResults = buildMetadata(debug, logger, statsTupleCombo, cutLimits, tile_id, \
-                                        L2Scene01MetaFileName, L1Scene01MetaString, \
-                                        L2Scene02MetaFileName, L1Scene02MetaString, \
-                                        L2Scene03MetaFileName, L1Scene03MetaString, \
-                                        appVersion, productionDateTime, filenameCrosswalk, \
-                                        region, contribSceneCount, metaFullName)
-
-    if 'ERROR' in metaResults:
-        logger.error('Error: writing metadata file')
-        logger.error('        Error: {0}'.format(traceback.format_exc()))
-        return "ERROR"
-
-    if (not os.path.isfile(metaFullName)):
-        logger.error('Error: metadata file does not exist')
-        logger.error('        Error: {0}'.format(traceback.format_exc()))
-        return "ERROR"
-
-                                                            # Copy the metadata file to the output directory
-
-    metaOutputName = os.path.join(metaOutputDir, metaFileName)
-    try:
-        shutil.copyfile(metaFullName, metaOutputName)
-        make_file_group_writeable(metaOutputName)
-    except:
-        logger.error('Error: copying metadata file to output dir')
-        logger.error('        Error: {0}'.format(traceback.format_exc()))
-        return "ERROR"
-
-    toaFinishedList.append(metaFileName)
-    btFinishedList.append(metaFileName)
-    srFinishedList.append(metaFileName)
-    qaFinishedList.append(metaFileName)
-    swFinishedList.append(metaFileName)
-    stFinishedList.append(metaFileName)
-
-    logger.info('    End metadata')
-
-
-def process_output():
+def process_output(products, producers, outputs, tile_id, output_path):
     """ Package all of the Landsat  mosaics into the .tar files """
+    util.make_dirs(output_path)
 
-    output_tars = None
-    try:
-        util.tar_archive(stFullName, stFinishedList)
-    except:
-        logger.exception('Error: creating st tarfile')
-        return "ERROR"
-
+    for product_request in sorted(products, reverse=True):
+        output_archive = os.path.join(output_path, tile_id + '_' + product_request + '.tar')
+        logging.info('Create product %s', output_archive)
+        required_bands = config.determine_output_products(producers, product_request)
+        included = [outputs[x] for x in required_bands.keys() + ['_LINEAGE', 'XML']]
+        util.tar_archive(output_archive, included)
     logger.info('    End zipping')
 
 
-def process_browse():
+def process_browse(bands, workdir, tile_id, outpath):
     """ Create the browse file for EE """
-                                                    # the browseList was filled up in the 'Band Type 1' section
-    for browseBand in browseList:
-        if ('TAB6' in browseBand):
-            redBand = browseBand
-        elif ('TAB5' in browseBand):
-            grnBand = browseBand
-        else:
-            bluBand = browseBand
 
-                                                    # merge r,g,b bands
-    brw1FileName = tile_id + '_brw1.tif'
-    brw1FullName = os.path.join(tileDir, brw1FileName)
-    browseCmd1 = pythonLoc + ' ' + gdalmergeLoc + ' ' + "-o " + brw1FullName + \
-                            ' -separate ' + os.path.join(tileDir, redBand) + ' ' + \
-                            os.path.join(tileDir, grnBand) + ' ' + os.path.join(tileDir, bluBand)
-    if (debug):
-        logger.info('        1st browse command: {0}'.format(browseCmd1))
-    try:
-        returnValue = call(browseCmd1, shell=True)
-    except:
-        logger.error('Error: browse mergeCmd')
-        logger.error('        Error: {0}'.format(traceback.format_exc()))
-        return "ERROR"
+    logger.info('     Start processing for BROWSE')
 
-                                                    # scale the pixel values
-    brw2FileName = tile_id + '_brw2.tif'
-    brw2FullName = os.path.join(tileDir, brw2FileName)
-    browseCmd2 = gdaltranslateLoc + ' -scale 0 10000 -ot Byte ' + \
-                            brw1FullName + ' ' + brw2FullName
-    if (debug):
-        logger.info('        2nd browse command: {0}'.format(browseCmd2))
-    try:
-        returnValue = call(browseCmd2, shell=True)
-    except:
-        logger.error('Error: browse scaleCmd')
-        logger.error('        Error: {0}'.format(traceback.format_exc()))
-        return "ERROR"
+    browse_filename =  os.path.join(outpath, tile_id + '.tif')
 
-                                                    # apply compression
-    brw3FileName = tile_id + '_brw3.tif'
-    brw3FullName = os.path.join(tileDir, brw3FileName)
-    browseCmd3 = gdaltranslateLoc + ' -co COMPRESS=JPEG -co PHOTOMETRIC=YCBCR ' + \
-                brw2FullName + ' ' + brw3FullName
-    if (debug):
-        logger.info('        3rd browse command: {0}'.format(browseCmd3))
-    try:
-        returnValue = call(browseCmd3, shell=True)
-    except:
-        logger.error('Error: browse compressCmd')
-        logger.error('        Error: {0}'.format(traceback.format_exc()))
-        return "ERROR"
+    if os.path.exists(browse_filename):
+        logger.warning("Skip previously generated result %s", browse_filename)
+        return browse_filename
 
-                                                    # internal pyramids
-    browseCmd4 = gdaladdoLoc + ' ' + brw3FullName + ' 2 4 8 16'
-    if (debug):
-        logger.info('        4rd browse command: {0}'.format(browseCmd4))
-    try:
-        returnValue = call(browseCmd4, shell=True)
-    except:
-        logger.error('Error: browse internalPyramidsCmd')
-        logger.error('        Error: {0}'.format(traceback.format_exc()))
-        return "ERROR"
+    bands = {k: util.ffind(workdir, tile_id, tile_id + '_' + v + '.tif')
+             for k, v in bands.items()}
 
-                                                    # move to final location
-    browseFileName = tile_id + '.tif'
-    browseFullName = os.path.join(browseOutputDir, browseFileName)
-    if (debug):
-        logger.info('        Move browse to output directory')
-    try:
-        shutil.move(brw3FullName, browseFullName)
-        logger.info('rename file: {0}'.format(brw3FullName))
-    except:
-        logger.error('Error: Moving file: {0} ...'.format(brw3FullName))
-        logger.error('        Error: {0}'.format(traceback.format_exc()))
-        return "ERROR"
+    # create RGB image
+    temp_filename1 = os.path.join(workdir, tile_id, tile_id + '_brw1.tif')
+    merge_cmd = 'gdal_merge.py -o {outfile} -separate {red} {green} {blue}'
+    util.execute_cmd(merge_cmd.format(outfile=temp_filename1, **bands))
+
+    # scale the pixel values
+    temp_filename2 = os.path.join(workdir, tile_id, tile_id + '_brw2.tif')
+    scale_cmd = 'gdal_translate -scale 0 10000 -ot Byte {} {}'
+    util.execute_cmd(scale_cmd.format(temp_filename1, temp_filename2))
+
+    # apply compression
+    comp_cmd = 'gdal_translate -co COMPRESS=JPEG -co PHOTOMETRIC=YCBCR {} {}'
+    util.execute_cmd(comp_cmd.format(temp_filename2, browse_filename))
+
+    # internal pyramids
+    addo_cmd = 'gdaladdo {} 2 4 8 16'
+    util.execute_cmd(addo_cmd.format(browse_filename))
+    util.remove(temp_filename1, temp_filename2)
 
     logger.info('    End building browse.')
+    if not os.path.exists(browse_filename):
+        logger.error('Processing failed to generate desired output: %s', browse_filename)
+    return browse_filename
 
 
 def process_segment(segment, output_path, conf):
@@ -1473,10 +699,9 @@ def process_segment(segment, output_path, conf):
 
     # Intersect scene with tile index to determine which tiles must be produced
     # Get tiles for scene and for each tile a list of path/rows from consecutive scenes
-    hv_tiles, tiles_contrib_scenes = (
-        geofuncs.get_tile_scene_intersections(db.connection(conf.connstr),
-                                              segment['LANDSAT_PRODUCT_ID'],
-                                              region))
+    hv_tiles, tile_scenes = geofuncs.get_tile_scene_intersections(db.connection(conf.connstr),
+                                                                  segment['LANDSAT_PRODUCT_ID'],
+                                                                  region)
 
     logger.info('Number of tiles to create: %d', len(hv_tiles))
     if len(hv_tiles) == 0:
@@ -1489,7 +714,7 @@ def process_segment(segment, output_path, conf):
 
     for current_tile in hv_tiles:
         try:
-            tile_state = process_tile(current_tile, segment, region, tiles_contrib_scenes, output_path, conf)
+            tile_state = process_tile(current_tile, segment, region, tile_scenes, output_path, conf)
         except:
             logger.exception('Unexpected error processing tile {} !'.format(current_tile))
             tile_state = 'ERROR'
@@ -1516,8 +741,7 @@ def process_segments(segments, output_path, conf):
         # in work directory at a time
         if (i - 2) > -1:
             unneededScene = segment[i - 2]['LANDSAT_PRODUCT_ID']
-            if (os.path.isdir(unneededScene)):
-                shutil.rmtree(unneededScene)
+            util.remove(unneededScene)
 
         scene_state = process_segment(segment, output_path, conf)
         logger.info("Scene %s is %s.", segment['LANDSAT_PRODUCT_ID'], scene_state)
@@ -1526,5 +750,5 @@ def process_segments(segments, output_path, conf):
     # cleanup any remaining scene directories
     for segment in segments:
         unneededScene = segment['LANDSAT_PRODUCT_ID']
-        if not conf.debug and os.path.isdir(unneededScene):
-           shutil.rmtree(unneededScene)
+        if not conf.debug:
+           util.remove(unneededScene)
