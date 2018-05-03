@@ -34,124 +34,98 @@ from espa import Metadata
 from util import logger
 import util
 import geofuncs
+import landsat
 
-# ----------------------------------------------------------------------------------------------
-#
-#   Purpose:  Create a metadata.xml file
-#
-#   Build a new tile metadata file by stealing a lot of the information from the
-#   source L2 metadata files.
-#
-def buildMetadata(debug, logger, statsTuple, cutLimits, tileID, \
-                                L2Scene01MetaFileName, L1Scene01MetaString, \
-                                L2Scene02MetaFileName, L1Scene02MetaString, \
-                                L2Scene03MetaFileName, L1Scene03MetaString, \
-                                appVerStr, productionDateTime, filenameCrosswalk, \
-                                regionStr, numScenesPerTile, metaFullName):
 
-    if (debug):
-        logger.info('Buildmetadata: Entered')
+def buildMetadata(metadata_filename, bit_counts, clip_extents, tile_id, metadata_locs,
+                  production_timestamp, tiled_filenames, segment, region, lng_count):
+    """ Build a new tile metadata file by stealing a lot of the information from the
+        source L2 metadata files.
+    """
+    logger.debug('Buildmetadata: Entered')
 
     SceneTagsToBeKept = ('data_provider', 'satellite', 'instrument', \
                                        'acquisition_date', 'scene_center_time', \
                                        'level1_production_date', 'wrs', 'product_id', \
                                         'lpgs_metadata_file')
 
-                                                        # L2 scene information sources
-    s1L2_tree = ET.parse(L2Scene01MetaFileName)
-    s1L2_root = s1L2_tree.getroot()
+    L1Tuple = []
+    L2Tuple = []
+    for i, metafilenames in enumerate(metadata_locs):
+        if i < lng_count:
+            l2tree = ET.parse(metafilenames['L2XML'])
+            l2tree = l2tree.getroot()
+            L2Tuple.append(l2tree)
+            L1Tuple.append(landsat.read_metadatas(metafilenames['L1MTL']))
 
                                                         # read any namespace from the 1st L2 scene
     namespace = ''
-    if ('{' in s1L2_root.tag):
-        endPos = (s1L2_root.tag).find('}')
-        namespace = s1L2_root.tag[:endPos+1]
-
-    s2L2_tree = ''
-    s2L2_root = ''
-    if (numScenesPerTile > 1):
-        s2L2_tree = ET.parse(L2Scene02MetaFileName)
-
-    s3L2_tree = ''
-    s3L2_root = ''
-    if (numScenesPerTile > 2):
-        s3L2_tree = ET.parse(L2Scene03MetaFileName)
+    if ('{' in l2tree.tag):
+        endPos = (l2tree.tag).find('}')
+        namespace = l2tree.tag[:endPos+1]
 
                                                         # Start the output xml
     outRoot = ET.Element('ard_metadata')
     outTileMetadata = ET.SubElement(outRoot, 'tile_metadata')
-
-                                                        #
-                                                        #
-                                                        # Build the tile's global metadata
-                                                        #
-                                                        #
     outTileGlobal = ET.SubElement(outTileMetadata, 'global_metadata')
 
                                                         # data_provider - use L2 scene
-    for child in s1L2_root.find(namespace + 'global_metadata'):
+    for child in l2tree.find(namespace + 'global_metadata'):
         if (child.tag == namespace + 'data_provider'):
             outDataProvider = ET.SubElement(outTileGlobal, 'data_provider', child.attrib)
             outDataProvider.text = child.text
 
                                                         # satellite - new
     gm_satellite = ET.SubElement(outTileGlobal, 'satellite')
-    satelliteStr = tileID[3]
-    if (satelliteStr == '4'):
-        gm_satellite.text = 'LANDSAT_4'
-    elif (satelliteStr == '5'):
-        gm_satellite.text = 'LANDSAT_5'
-    elif (satelliteStr == '7'):
-        gm_satellite.text = 'LANDSAT_7'
-    else:
-        gm_satellite.text = 'LANDSAT_8'
+    satellite_strs = {
+        'LT04': 'LANDSAT_4',
+        'LT05': 'LANDSAT_5',
+        'LE07': 'LANDSAT_7',
+        'LC08': 'LANDSAT_8',
+    }
+    gm_satellite.text = satellite_strs[tile_id[:4]]
 
                                                         # instrument - new
     gm_instrument = ET.SubElement(outTileGlobal, 'instrument')
-    instrumentStr = tileID[1]
-    if (instrumentStr == 'C'):
-        gm_instrument.text = 'OLI/TIRS_Combined'
-    elif (instrumentStr == 'O'):
-        gm_instrument.text = 'OLI-only'
-    elif (instrumentStr == 'E'):
-        gm_instrument.text = 'ETM'
-    elif (instrumentStr == 'T') and (satelliteStr == '8'):
-        gm_instrument.text = 'TIRS-only'
-    else:
-        gm_instrument.text = 'TM'
+    instrument_strs = {
+        'LT04': 'TM',
+        'LT05': 'TM',
+        'LE07': 'ETM',
+        'LC08': 'OLI/TIRS_Combined',
+    }
+    gm_instrument.text = instrument_strs[tile_id[:4]]
 
                                                             # Level 1 Collection - new
     gm_l1coll = ET.SubElement(outTileGlobal, 'level1_collection')
-    gm_l1coll.text = tileID[34:36]
+    gm_l1coll.text = tile_id[34:36]
 
                                                                 # ARD Version - new
     gm_ardVersion = ET.SubElement(outTileGlobal, 'ard_version')
-    gm_ardVersion.text = tileID[38:40]
+    gm_ardVersion.text = tile_id[38:40]
 
                                                                     # Region - new
     gm_region = ET.SubElement(outTileGlobal, 'region')
-    gm_region.text = tileID[5:7]
+    gm_region.text = tile_id[5:7]
 
                                                         # acquisition date - use L2 scene
-    for child in s1L2_root.find(namespace + 'global_metadata'):
+    for child in l2tree.find(namespace + 'global_metadata'):
         if (child.tag == namespace + 'acquisition_date'):
             outAcqDate = ET.SubElement(outTileGlobal, 'acquisition_date', child.attrib)
             outAcqDate.text = child.text
 
                                                         # tile_id - new
     gm_productid = ET.SubElement(outTileGlobal, 'product_id')
-    gm_productid.text = tileID
+    gm_productid.text = tile_id
 
                                                         # tile_production_date - new
     gm_tilepd = ET.SubElement(outTileGlobal, 'production_date')
-    gm_tilepd.text = productionDateTime
+    gm_tilepd.text = production_timestamp
 
                                                         #bounding coordinates - modify L2 scene
-    if (debug):
-        logger.info('Buildmetadata: Ready for bounding_coordinates')
-    horiz = tileID[8:11]
-    vertical = tileID[11:14]
-    newBoundingCoordsStr =  getGeographicBoundingCoordinates(logger, horiz, vertical, regionStr)
+    logger.debug('Buildmetadata: Ready for bounding_coordinates')
+    horiz = tile_id[8:11]
+    vertical = tile_id[11:14]
+    newBoundingCoordsStr =  getGeographicBoundingCoordinates(logger, horiz, vertical, region)
     tempBoundingElement = ET.fromstring(newBoundingCoordsStr)
 
     gm_bounding = ET.SubElement(outTileGlobal, tempBoundingElement.tag, tempBoundingElement.attrib)
@@ -161,9 +135,8 @@ def buildMetadata(debug, logger, statsTuple, cutLimits, tileID, \
         gm_bounding_child.text = child.text
 
                                                         #projection information - modify L2 scene
-    if (debug):
-        logger.info('Buildmetadata: Ready for projection information')
-    newProjInfo = global_createProjInfo(logger, cutLimits, regionStr)
+    logger.debug('Buildmetadata: Ready for projection information')
+    newProjInfo = global_createProjInfo(logger, clip_extents, region)
     tempProjElement = ET.fromstring(newProjInfo)
 
     gm_ProjInfo = ET.SubElement(outTileGlobal, tempProjElement.tag, tempProjElement.attrib)
@@ -177,37 +150,37 @@ def buildMetadata(debug, logger, statsTuple, cutLimits, tileID, \
                 gm_proj_grandchild.text = projChild.text
 
                                                         # orientation_angle - use L2 scene
-    for child in s1L2_root.find(namespace + 'global_metadata'):
+    for child in l2tree.find(namespace + 'global_metadata'):
         if (child.tag == namespace + 'orientation_angle'):
             outOrientation = ET.SubElement(outTileGlobal, 'orientation_angle', child.attrib)
             outOrientation.text = child.text
 
                                                         # tile_grid - new
     gm_tileid = ET.SubElement(outTileGlobal, 'tile_grid')
-    gm_tileid.set('v', tileID[11:14])
-    gm_tileid.set('h', tileID[8:11])
+    gm_tileid.set('v', tile_id[11:14])
+    gm_tileid.set('h', tile_id[8:11])
 
                                                         # scene_count - new
     gm_sc = ET.SubElement(outTileGlobal, 'scene_count')
-    gm_sc.text = str(numScenesPerTile)
+    gm_sc.text = str(lng_count)
 
-    pixelTypeTuple =  createPixelTypeTuple(debug, logger, statsTuple)
+    qa_percents = createPixelTypeTuple(bit_counts)
 
                                                         # cloud_cover - new
     gm_cc = ET.SubElement(outTileGlobal, 'cloud_cover')
-    gm_cc.text = pixelTypeTuple[0]
+    gm_cc.text = qa_percents['cloud_cover']
 
                                                         # cloud_shadow - new
     gm_cs = ET.SubElement(outTileGlobal, 'cloud_shadow')
-    gm_cs.text = pixelTypeTuple[1]
+    gm_cs.text = qa_percents['cloud_shadow']
 
                                                         # snow_ice - new
     gm_si = ET.SubElement(outTileGlobal, 'snow_ice')
-    gm_si.text = pixelTypeTuple[2]
+    gm_si.text = qa_percents['snow_ice']
 
                                                         # fill - new
     gm_fill = ET.SubElement(outTileGlobal, 'fill')
-    gm_fill.text = pixelTypeTuple[3]
+    gm_fill.text = qa_percents['fill']
 
                                                         #
                                                         # Build all of the bands for the tile
@@ -222,7 +195,7 @@ def buildMetadata(debug, logger, statsTuple, cutLimits, tileID, \
     outTileBands = ET.SubElement(outTileMetadata, 'bands')
 
                                                         # add lineage band
-    lineageStr = createLineageSection(debug, logger, tileID, appVerStr, productionDateTime)
+    lineageStr = createLineageSection(tile_id, production_timestamp)
     tempLineageElement = ET.fromstring(lineageStr)
 
     bands_lineage = ET.SubElement(outTileBands, tempLineageElement.tag, tempLineageElement.attrib)
@@ -235,12 +208,11 @@ def buildMetadata(debug, logger, statsTuple, cutLimits, tileID, \
                                                         # Each band will need to be modified to reflect the
                                                         # characteristics of the tile.
 
-    bandsElement =  s1L2_root.find(namespace + 'bands')
+    bandsElement =  l2tree.find(namespace + 'bands')
 
     for curBand in bandsElement:
         oldBandStr =ET.tostring(curBand)
-        newBandStr = fixTileBand2(debug, logger, tileID, filenameCrosswalk, \
-                                                productionDateTime, oldBandStr)
+        newBandStr = fixTileBand2(tile_id, tiled_filenames, production_timestamp, oldBandStr)
 
         tempBandElement = ET.fromstring(newBandStr)
 
@@ -254,8 +226,7 @@ def buildMetadata(debug, logger, statsTuple, cutLimits, tileID, \
                     bands_band_grandchild = ET.SubElement(bands_band_child, bandChild.tag, bandChild.attrib)
                     bands_band_grandchild.text = bandChild.text
 
-    if (debug):
-        logger.info('Buildmetadata: finished tile bands')
+    logger.debug('Buildmetadata: finished tile bands')
 
                                                         #
                                                         # "Global" and "bands" have now been created for the new tiles.
@@ -263,29 +234,23 @@ def buildMetadata(debug, logger, statsTuple, cutLimits, tileID, \
                                                         #  Next modify the scene metadata for each contributing scene.
                                                         #  We'll have to read some values from the Level 1 (MTL.txt) file.
                                                         #
-    L1Tuple = [L1Scene01MetaString, L1Scene02MetaString, L1Scene03MetaString]   # already strings
+    for i in range(lng_count):           # for each contributing scene
 
-    L2Tuple = [s1L2_tree, s2L2_tree, s3L2_tree]    # At the top of this function, we already
-                                                                          # parsed in the L2 metadata files.  These
-                                                                          # are the trees
-    i = 0
-    while (i < numScenesPerTile):           # for each contributing scene
-
-        sceneRoot = (L2Tuple[i]).getroot()              # L2 input object
+        sceneRoot = (L2Tuple[i])              # L2 input object
 
                                                                           #  Read some values from the Level 1 (MTL.txt) file.
-        request_id = getL1Value(debug, logger, L1Tuple[i], "REQUEST_ID")
-        scene_id = getL1Value(debug, logger, L1Tuple[i], "LANDSAT_SCENE_ID")
-        elev_src = getL1Value(debug, logger, L1Tuple[i], "ELEVATION_SOURCE")
+        request_id = getL1Value(L1Tuple[i], "REQUEST_ID")
+        scene_id = getL1Value(L1Tuple[i], "LANDSAT_SCENE_ID")
+        elev_src = getL1Value(L1Tuple[i], "ELEVATION_SOURCE")
 
-        if (satelliteStr != '8'):
-            sensor_mode = getL1Value(debug, logger, L1Tuple[i], "SENSOR_MODE")
-            ephemeris_type = getL1Value(debug, logger, L1Tuple[i], "EPHEMERIS_TYPE")
+        if tile_id.startswith('LC08'):
+            sensor_mode = getL1Value(L1Tuple[i], "SENSOR_MODE")
+            ephemeris_type = getL1Value(L1Tuple[i], "EPHEMERIS_TYPE")
 
-        cpf_name = getL1Value(debug, logger, L1Tuple[i], "CPF_NAME")
-        geometric_rmse_model = getL1Value(debug, logger, L1Tuple[i], "GEOMETRIC_RMSE_MODEL")
-        geometric_rmse_model_x = getL1Value(debug, logger, L1Tuple[i], "GEOMETRIC_RMSE_MODEL_X")
-        geometric_rmse_model_y = getL1Value(debug, logger, L1Tuple[i], "GEOMETRIC_RMSE_MODEL_Y")
+        cpf_name = getL1Value(L1Tuple[i], "CPF_NAME")
+        geometric_rmse_model = getL1Value(L1Tuple[i], "GEOMETRIC_RMSE_MODEL")
+        geometric_rmse_model_x = getL1Value(L1Tuple[i], "GEOMETRIC_RMSE_MODEL_X")
+        geometric_rmse_model_y = getL1Value(L1Tuple[i], "GEOMETRIC_RMSE_MODEL_Y")
 
                                                                           # opening tags for each scene
         outSceneMetadata = ET.SubElement(outRoot, 'scene_metadata')
@@ -315,7 +280,7 @@ def buildMetadata(debug, logger, statsTuple, cutLimits, tileID, \
                 outGeneric = ET.SubElement(outSceneGlobal, 'elevation_source')
                 outGeneric.text = elev_src
 
-                if (satelliteStr != '8'):
+                if tile_id.startswith('LC08'):
                     outGeneric = ET.SubElement(outSceneGlobal, 'sensor_mode')
                     outGeneric.text = sensor_mode
                     outGeneric = ET.SubElement(outSceneGlobal, 'ephemeris_type')
@@ -356,10 +321,7 @@ def buildMetadata(debug, logger, statsTuple, cutLimits, tileID, \
                         bands_band_bitmap = ET.SubElement(childElement, bitmapTag, bitmapChild.attrib)
                         bands_band_bitmap.text = bitmapChild.text
 
-        i = i + 1
-
-    if (debug):
-        logger.info('Buildmetadata: Ready to write')
+    logger.debug('Buildmetadata: Ready to write')
 
     namespace1Prefix = "xmlns"
     namespace2Prefix = "xmlns:xsi"
@@ -381,59 +343,44 @@ def buildMetadata(debug, logger, statsTuple, cutLimits, tileID, \
     prettyString = minidom.parseString(ET.tostring(outRoot)).toprettyxml(encoding="utf-8", indent="    ")
 
                                                                     # Write to temp file
-    try:
-        uglyFullName = metaFullName.replace(".xml", "_ugly.xml")
-        f = open(uglyFullName, "w")
+    uglyFullName = metadata_filename.replace(".xml", "_ugly.xml")
+    with open(uglyFullName, "w") as f:
         f.write(prettyString.encode('utf-8'))
-        f.close()
-
-    except:
-        logger.error('Error: Buildmetadata: Error when writing temp file')
-        logger.error('        Error: {0}'.format(traceback.format_exc()))
-        return 'metadata ERROR'
 
                                                                       # Looks like the minidom pretty print added some
                                                                       # blank lines followed by CRLF.  The blank lines are
                                                                       # of more than one length in our case.  Remove any
                                                                       # blank lines.
+    inMetafile = open(uglyFullName, "r")
+    outMetafile = open(metadata_filename, "w")
 
-    try:
-        inMetafile = open(uglyFullName, "r")
-        outMetafile = open(metaFullName, "w")
+    for curLine in inMetafile:
 
-        for curLine in inMetafile:
+        allSpaces = True
+        for curChar in curLine:
+            if (curChar != '\x20') and (curChar != '\x0D') and (curChar != '\x0A'):
+                allSpaces = False
+                continue
 
-            allSpaces = True
-            for curChar in curLine:
-                if (curChar != '\x20') and (curChar != '\x0D') and (curChar != '\x0A'):
-                    allSpaces = False
-                    continue
+        if (allSpaces == False):
+            outMetafile.write(curLine)
+        #else:
+        #    print 'Found blank line'
 
-            if (allSpaces == False):
-                outMetafile.write(curLine)
-            #else:
-            #    print 'Found blank line'
+    inMetafile.close()
+    outMetafile.close()
 
-        inMetafile.close()
-        outMetafile.close()
+    # Validate metafile that was just created
+    tile_metadata = Metadata(xml_filename=metadata_filename)
+    tile_metadata.validate()
 
-        # Validate metafile that was just created
-        tile_metadata = Metadata(metaFullName)
-        tile_metadata.validate()
-
-    except:
-        logger.error('Error: Buildmetadata: Error when fixing or validating file')
-        logger.error('        Error: {0}'.format(traceback.format_exc()))
-        return 'metadata ERROR'
-
-    return 'okay'
 
 
 # ----------------------------------------------------------------------------------------------
 #
 #   Purpose:  Read a value from the level 1 metadata string
 #
-def getL1Value(debug, logger, L1String, key):
+def getL1Value(L1String, key):
 
     startPos = L1String.find(key)
     if startPos != -1:
@@ -457,28 +404,27 @@ def getL1Value(debug, logger, L1String, key):
 #            True Cloud Cover
 #            Snow/Cloud combination - see the 'parseHistFile' function for more info
 #
-def createPixelTypeTuple(debug, logger, longsTuple):
+def createPixelTypeTuple(longsTuple):
 
                                                  # Calculate fill
-    fillLong = longsTuple[0] / 25000000.0 * 100.0
-    fillStr = '{:0.4f}'.format(fillLong)
+    fillLong = longsTuple['fill'] / 25000000.0 * 100.0
+    longsTuple['fill'] = '{:0.4f}'.format(fillLong)
 
-    numNonFillPixels = 25000000.0 - longsTuple[0]
+    numNonFillPixels = 25000000.0 - fillLong
 
                                                  # Calculate Cloud Cover
-    cloudLong = longsTuple[5] / numNonFillPixels * 100.0
-    cloudStr = '{:0.4f}'.format(cloudLong)
+    cloudLong = longsTuple['cloud_cover'] / numNonFillPixels * 100.0
+    longsTuple['cloud_cover']  = '{:0.4f}'.format(cloudLong)
 
                                                  # Calculate Cloud Shadow
-    shadowLong = longsTuple[4] / numNonFillPixels * 100.0
-    shadowStr = '{:0.4f}'.format(shadowLong)
+    shadowLong = longsTuple['cloud_shadow'] / numNonFillPixels * 100.0
+    longsTuple['cloud_shadow'] = '{:0.4f}'.format(shadowLong)
 
                                                  # Calculate Snow/Ice
-    snowLong = longsTuple[3] / numNonFillPixels * 100.0
-    snowStr = '{:0.4f}'.format(snowLong)
+    snowLong = longsTuple['snow_ice'] / numNonFillPixels * 100.0
+    longsTuple['snow_ice'] = '{:0.4f}'.format(snowLong)
 
-    pixelTypeTuple = (cloudStr, shadowStr, snowStr, fillStr)
-    return pixelTypeTuple
+    return longsTuple
 
 
 # ----------------------------------------------------------------------------------------------
@@ -486,7 +432,7 @@ def createPixelTypeTuple(debug, logger, longsTuple):
 #   Purpose:  To create the lineage band metadata block.  This band originates with
 #                      the tile, not with the scene.
 #
-def createLineageSection(debug, logger, tileID, appVersion, prodDate):
+def createLineageSection(tileID, prodDate):
 
     lineageText = '<band fill_value="0" nsamps="5000" nlines="5000" data_type="UINT8" '
     lineageText += 'category="metadata" name="LINEAGEQA" product="scene_index" '
@@ -512,8 +458,7 @@ def createLineageSection(debug, logger, tileID, appVersion, prodDate):
 #
 #   curPos coming in is the position in the file pointing to a <band> tag.
 #
-def fixTileBand2(debug, logger, tileID, filenameCrosswalk, \
-                            productionDateTime, bandTag):
+def fixTileBand2(tileID, filenames, productionDateTime, bandTag):
 
                                                                 # remove namespace info
     bandTag = bandTag.replace('ns0:', '')
@@ -539,13 +484,14 @@ def fixTileBand2(debug, logger, tileID, filenameCrosswalk, \
     nameEndPos = bandTag.find('"', nameBeginPos + 7)
     oldBandName = bandTag[nameBeginPos:nameEndPos+1]
     nameOnly = bandTag[nameBeginPos+6:nameEndPos]
-    newName = 'name="' + getARDName(nameOnly, filenameCrosswalk) + '"'
+    newName = filenames[nameOnly].split('_')[-1].split('.')[0]
+    newName = 'name="%s"' % newName
 
                                                                  # 2. in the file_name tag
     startFilePos = bandTag.find('<file_name>', 0)
     endFilePos = bandTag.find('</file_name>', startFilePos)
     oldFileText = bandTag[startFilePos+11:endFilePos]
-    newFileText = tileID + '_' + getARDName(nameOnly, filenameCrosswalk) + '.tif'
+    newFileText = os.path.basename(filenames[nameOnly])
 
                                                                  # Modify <production_date>
     startDatePos = bandTag.find('<production_date>', 0)
