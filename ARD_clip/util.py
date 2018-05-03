@@ -206,3 +206,42 @@ def make_dirs(directory):
     else:
         logger.debug('Directory already exists: %s', directory)
         return False
+
+
+def ffind(*paths):
+    """ Find files by combining globs and returning the first result
+
+    Args:
+        paths (list): list of filepath parts to combine as a glob
+
+    Returns:
+        str: the first result match from the glob
+
+    Example:
+        >>> ffind('/usr', 'bin', '*sh')
+        '/usr/bin/bash'
+    """
+    search = os.path.join(*paths)
+    logger.debug('Find files: %s', search)
+    return glob.glob(search).pop()
+
+
+def remove(*paths):
+    """ Remove mutiple paths, either files or directories
+
+    Args:
+        paths (list): the paths to attempt to remove
+
+    Returns:
+        None
+
+    Examples:
+        >>> remove('local.txt', '/path/to/folder', '/other/folder')
+        None
+    """
+    for path in paths:
+        logger.debug('Remove %s', path)
+        if os.path.isfile(path):
+            os.remove(path)
+        elif os.path.isdir(path):
+            shutil.rmtree(path)
