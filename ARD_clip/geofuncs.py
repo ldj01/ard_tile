@@ -20,51 +20,6 @@ from util import logger
 
 # ----------------------------------------------------------------------------------------------
 #
-#   Purpose:  Given a tile identifier (Horizontal, Vertical), return the Albers
-#                     coordinates
-#
-def getTileFootprintCoords(curTile, tileFootprints):
-
-    returnString = ''
-    for curTuple in tileFootprints:
-        if (curTuple[0] == curTile):
-            returnString = str(curTuple[1][0]) + ' ' + str(curTuple[1][1]) + ' ' + \
-                           str(curTuple[1][2]) + ' ' + str(curTuple[1][3]) + ' '
-    return returnString
-
-# ----------------------------------------------------------------------------------------------
-#
-#   Purpose:  Bands are renamed from Bridge version to ARD version.  This function
-#                      returns the correct ARD suffix only
-#
-def getARDName(L2filename, filenameCrosswalk):
-
-    for curTuple in filenameCrosswalk:
-        if (curTuple[0] == L2filename):
-            return curTuple[1]
-
-    return 'ERROR'
-
-# ----------------------------------------------------------------------------------------------
-#
-#   Purpose:  Reads an existing L2 metadata file and returns it as a big, long string
-#
-def makeMetadataString(metaName):
-
-    if (not os.path.isfile(metaName)):
-        return 'ERROR - File does not exist'
-    else:
-        try:
-            infile = open(metaName, 'r')
-            metaLines = infile.read()
-            infile.close()
-        except:
-            return 'ERROR - Opening or closing metadata file'
-
-    return metaLines
-
-# ----------------------------------------------------------------------------------------------
-#
 #   Purpose:  A file containing a histogram of values in the pixel_qa band has been
 #                     generated.  Open the file and find the count of the specific values for
 #                     each of the various categories.  These counts will be used for calculating
@@ -189,7 +144,7 @@ def sum_counts(unique_values, count_list, target_bit):
 
 # ----------------------------------------------------------------------------------------------
 #
-def raster_value_count(raster_in, landsat_8=False):
+def raster_value_count(raster_in, tile_id):
 
 
     # open raster, read first band as array
@@ -200,24 +155,31 @@ def raster_value_count(raster_in, landsat_8=False):
     uni, counts = np.unique(band_arr, return_counts=True)
 
     # count bits
-    countFill = sum_counts(uni, counts, 0)
-    countClear = sum_counts(uni, counts, 1)
-    countWater = sum_counts(uni, counts, 2)
-    countShadow = sum_counts(uni, counts, 3)
-    countSnow = sum_counts(uni, counts, 4)
-    countCloud = sum_counts(uni, counts, 5)
+    bit_counts = {
+        'fill': sum_counts(uni, counts, 0),
+        'clear': sum_counts(uni, counts, 1),
+        'water': sum_counts(uni, counts, 2),
+        'cloud_shadow': sum_counts(uni, counts, 3),
+        'snow_ice': sum_counts(uni, counts, 4),
+        'cloud_cover': sum_counts(uni, counts, 5),
+    }
 
     # get high-conf cirrus and terrain occlusion for L8
-    if landsat_8:
-        countCirrus = sum_counts(uni, counts, 9)
-        countTerrain = sum_counts(uni, counts, 10)
+    if tile_id.startswith('LC08'):
+        bit_counts['cirrus'] = sum_counts(uni, counts, 9)
+        bit_counts['terrain'] = sum_counts(uni, counts, 10)
 
-        return (countFill, countClear, countWater, countShadow, countSnow,
-                countCloud, countCirrus, countTerrain)
+    logger.debug('        # pixels Fill: %s',        bit_counts.get('fill'))
+    logger.debug('        # pixels Clear: %s',       bit_counts.get('clear'))
+    logger.debug('        # pixels Water: %s',       bit_counts.get('water'))
+    logger.debug('        # pixels Snow: %s',        bit_counts.get('snow_ice'))
+    logger.debug('        # pixels CloudShadow: %s', bit_counts.get('cloud_shadow'))
+    logger.debug('        # pixels CloudCover: %s',  bit_counts.get('cloud_cover'))
+    logger.debug('        # pixels Cirrus: %s',      bit_counts.get('cirrus'))
+    logger.debug('        # pixels Terrain: %s',     bit_counts.get('terrain'))
 
-    else:  # else return for L4-7
-        return (countFill, countClear, countWater, countSnow, countShadow,
-                countCloud)
+    return bit_counts
+
 
 
 def get_tile_scene_intersections(connection, product_id, region, n=2):
