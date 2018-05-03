@@ -365,14 +365,14 @@ def buildMetadata(debug, logger, statsTuple, cutLimits, tileID, \
     namespace2Prefix = "xmlns:xsi"
     namespace3Prefix = "xsi:schemaLocation"
 
-    namespace1URI = "https://landsat.usgs.gov/ard/v1"
+    namespace1URI = "https://landsat.usgs.gov/ard/v1.1"
     namespace2URI = "http://www.w3.org/2001/XMLSchema-instance"
-    namespace3URI = "https://landsat.usgs.gov/ard/v1 https://landsat.usgs.gov/ard/ard_metadata_v1_0.xsd"
+    namespace3URI = "https://landsat.usgs.gov/ard/v1.1 https://landsat.usgs.gov/ard/ard_metadata_v1_1.xsd"
 
     outRoot.attrib[namespace3Prefix] = namespace3URI
     outRoot.attrib[namespace2Prefix] = namespace2URI
     outRoot.attrib[namespace1Prefix] = namespace1URI
-    outRoot.attrib["version"] = "1.0"
+    outRoot.attrib["version"] = "1.1"
 
                                                                     # Add string indentation - Unfortunately,
                                                                     # this function produces extra carriage returns
