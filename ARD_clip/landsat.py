@@ -1,5 +1,6 @@
 """ Functions for known data structures specific to landsat """
 
+import os
 import re
 import datetime
 
@@ -56,3 +57,10 @@ def generate_tile_id(product_id, current_tile, region, collection, version):
     options.update(product_info)
     tile_id = '{mission}_{region}_{H:03d}{V:03d}_{acqdate}_{today}_C{c:02d}_V{v:02d}'
     return tile_id.format(**options)
+
+
+def read_metadatas(filename):
+    """ Reads an existing L2 metadata file and returns it as a big, long string """
+    if not os.path.isfile(filename):
+        raise IOError('Could not find metadata file %s' % filename)
+    return open(filename, 'r').read()
