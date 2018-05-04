@@ -138,7 +138,7 @@ def process_tile(current_tile, segment, region, tiles_contrib_scenes, output_pat
             return filename
 
     outputs['XML'] = process_metadata(segment, stacking, tile_id, clip_extents, region, lng_count, lng_array,
-                                      production_timestamp, outputs, conf.workdir)
+                                      production_timestamp, producers, outputs, conf.workdir)
 
     process_output(conf.products, producers, outputs, tile_id, output_path)
     util.process_checksums(indir=conf.workdir, outdir=output_path)
@@ -597,15 +597,10 @@ def process_bandtype_8(stacking, band_name, clip_extents, tile_id, rename, workd
 
 
 def process_metadata(segment, stacking, tile_id, clip_extents, region, lng_count, lng_array,
-                     production_timestamp, tiled_filenames, workdir):
+                     production_timestamp, producers, tiled_filenames, workdir):
     """ Create the tile metadata file, Generate statistics we will need """
 
     logger.info('     Start processing for metadata')
-    metadata_filename =  os.path.join(workdir, tile_id, tile_id + '.xml')
-
-    if os.path.exists(metadata_filename):
-        logger.warning("Skip previously generated result %s", metadata_filename)
-        return metadata_filename
 
     pqa_name = util.ffind(workdir, tile_id, '*PIXELQA.tif')
     bit_counts = geofuncs.raster_value_count(pqa_name, tile_id)
@@ -617,15 +612,34 @@ def process_metadata(segment, stacking, tile_id, clip_extents, region, lng_count
             'L1MTL': util.ffind(workdir, stack['LANDSAT_PRODUCT_ID'], '*_MTL.txt'),
         })
 
-    buildMetadata(metadata_filename, bit_counts, clip_extents, tile_id, metadata_locs,
-                  production_timestamp, tiled_filenames, segment, region, lng_count)
+    if {'ARD', 'L3'} != set(producers['xml'].keys()) or ['SW'] != producers['xml']['L3']:
+        raise NotImplementedError('Logic for making _SW.xml is very brittle... ')
 
-    util.make_file_group_writeable(metadata_filename)
-    logger.info('    End processing for metadata as %s ', metadata_filename)
-    if not os.path.exists(metadata_filename):
-        logger.error('Processing failed to generate desired output: %s', metadata_filename)
-    return metadata_filename
+    filenames = dict()
+    for xml_group, products in producers['xml'].items():
 
+        xml_id = str(tile_id)
+        if len(products) == 1:
+            xml_id = tile_id + '_' + products[-1]
+
+        logger.info('     Start processing for metadata group: %s', xml_group)
+        metadata_filename =  os.path.join(workdir, tile_id, xml_id + '.xml')
+
+        if os.path.exists(metadata_filename):
+            logger.warning("Skip previously generated result %s", metadata_filename)
+            continue
+
+        group_filenames = {k:v  for p in products
+                           for k,v in config.determine_output_products(producers, p).items()}
+        buildMetadata(metadata_filename, bit_counts, clip_extents, tile_id, metadata_locs,
+                      production_timestamp, group_filenames, segment, region, lng_count)
+
+        util.make_file_group_writeable(metadata_filename)
+        logger.info('    End processing for metadata as %s ', metadata_filename)
+        if not os.path.exists(metadata_filename):
+            logger.error('Processing failed to generate desired output: %s', metadata_filename)
+        filenames.update({p: metadata_filename for p in products})
+    return filenames
 
 
 def process_output(products, producers, outputs, tile_id, output_path):
@@ -636,7 +650,8 @@ def process_output(products, producers, outputs, tile_id, output_path):
         output_archive = os.path.join(output_path, tile_id + '_' + product_request + '.tar')
         logging.info('Create product %s', output_archive)
         required_bands = config.determine_output_products(producers, product_request)
-        included = [outputs[x] for x in required_bands.keys() + ['_LINEAGE', 'XML']]
+        included = [outputs[x] for x in required_bands.keys() + ['_LINEAGE']]
+        included.append(outputs['XML'][product_request])
         util.tar_archive(output_archive, included)
     logger.info('    End zipping')
 

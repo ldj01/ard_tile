@@ -210,9 +210,15 @@ def buildMetadata(metadata_filename, bit_counts, clip_extents, tile_id, metadata
 
     bandsElement =  l2tree.find(namespace + 'bands')
 
+    included_newnames = list()
     for curBand in bandsElement:
         oldBandStr =ET.tostring(curBand)
-        newBandStr = fixTileBand2(tile_id, tiled_filenames, production_timestamp, oldBandStr)
+        newNameOnly, newBandStr = fixTileBand2(tile_id, tiled_filenames, production_timestamp, oldBandStr)
+
+        if newBandStr is None:
+            logger.debug('Skipping band not in current XML group')
+            continue
+        included_newnames.append(newNameOnly)
 
         tempBandElement = ET.fromstring(newBandStr)
 
@@ -307,6 +313,9 @@ def buildMetadata(metadata_filename, bit_counts, clip_extents, tile_id, metadata
 
                                                                        # The scene bands
         for bandTag in sceneRoot.find(namespace + 'bands'):
+            if bandTag.attrib.get('name') not in included_newnames:
+                logger.debug('Skipping band not in current XML group')
+                continue
             newTag = (bandTag.tag).replace(namespace, '')
             bandElement = ET.SubElement(outSceneBands, newTag, bandTag.attrib)
             bandElement.text = bandTag.text
@@ -485,6 +494,10 @@ def fixTileBand2(tileID, filenames, productionDateTime, bandTag):
     nameEndPos = bandTag.find('"', nameBeginPos + 7)
     oldBandName = bandTag[nameBeginPos:nameEndPos+1]
     nameOnly = bandTag[nameBeginPos+6:nameEndPos]
+    if nameOnly not in filenames:
+        logger.warning('Skipping band %s as not part of this XML group', nameOnly)
+        return nameOnly, None
+
     newName = filenames[nameOnly].split('_')[-1].split('.')[0]
     newName = 'name="%s"' % newName
 
@@ -509,7 +522,7 @@ def fixTileBand2(tileID, filenames, productionDateTime, bandTag):
     bandTag = bandTag.replace(oldFileText, newFileText)
     bandTag = bandTag.replace(oldDateText, newDateText)
 
-    return bandTag
+    return nameOnly, bandTag
 
 
 

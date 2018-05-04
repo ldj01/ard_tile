@@ -150,6 +150,10 @@ LE07: &l457
     green: TAB4
     red:   TAB5
 
+  xml:
+    ARD: [ TA, BT, SR, ST, QA ]
+    L3: [ SW ]
+
 LT05:
   <<: *l457
 
@@ -157,6 +161,7 @@ LT04:
   <<: *l457
 
 LC08:
+  <<: *l457
   rename:
     toa_band1: TAB1
     toa_band2: TAB2
