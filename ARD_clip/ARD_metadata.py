@@ -416,25 +416,26 @@ def getL1Value(L1String, key):
 #
 def createPixelTypeTuple(longsTuple):
 
+    retval = dict()
                                                  # Calculate fill
     fillLong = longsTuple['fill'] / 25000000.0 * 100.0
-    longsTuple['fill'] = '{:0.4f}'.format(fillLong)
+    retval['fill'] = '{:0.4f}'.format(fillLong)
 
     numNonFillPixels = 25000000.0 - fillLong
 
                                                  # Calculate Cloud Cover
     cloudLong = longsTuple['cloud_cover'] / numNonFillPixels * 100.0
-    longsTuple['cloud_cover']  = '{:0.4f}'.format(cloudLong)
+    retval['cloud_cover']  = '{:0.4f}'.format(cloudLong)
 
                                                  # Calculate Cloud Shadow
     shadowLong = longsTuple['cloud_shadow'] / numNonFillPixels * 100.0
-    longsTuple['cloud_shadow'] = '{:0.4f}'.format(shadowLong)
+    retval['cloud_shadow'] = '{:0.4f}'.format(shadowLong)
 
                                                  # Calculate Snow/Ice
     snowLong = longsTuple['snow_ice'] / numNonFillPixels * 100.0
-    longsTuple['snow_ice'] = '{:0.4f}'.format(snowLong)
+    retval['snow_ice'] = '{:0.4f}'.format(snowLong)
 
-    return longsTuple
+    return retval
 
 
 # ----------------------------------------------------------------------------------------------
@@ -469,7 +470,6 @@ def createLineageSection(tileID, prodDate):
 #   curPos coming in is the position in the file pointing to a <band> tag.
 #
 def fixTileBand2(tileID, filenames, productionDateTime, bandTag):
-
                                                                 # remove namespace info
     bandTag = bandTag.replace('ns0:', '')
     nsBig = 'xmlns:ns0="http://espa.cr.usgs.gov/v2"'
