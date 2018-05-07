@@ -132,11 +132,8 @@ def process_tile(current_tile, segment, region, tiles_contrib_scenes, output_pat
             outputs[band_name] = filename
 
             if band_name == 'toa_band1':
-                outputs['_LINEAGE'] = process_lineage(stacking, band_name, clip_extents, tile_id, 'LINEAGEQA', conf.workdir)
-                lng_count, lng_array = process_lineage_contributing(outputs['_LINEAGE'], n_contrib_scenes, tile_id, conf.workdir)
-
-        if filename in ('ERROR', 'NOT NEEDED'):
-            return filename
+                outputs['LINEAGEQA'] = process_lineage(stacking, band_name, clip_extents, tile_id, 'LINEAGEQA', conf.workdir)
+                lng_count, lng_array = process_lineage_contributing(outputs['LINEAGEQA'], n_contrib_scenes, tile_id, conf.workdir)
 
     outputs['XML'] = process_metadata(segment, stacking, tile_id, clip_extents, region, lng_count, lng_array,
                                       production_timestamp, producers, outputs, conf.workdir)
@@ -649,8 +646,7 @@ def process_output(products, producers, outputs, tile_id, output_path):
     for product_request in sorted(products, reverse=True):
         output_archive = os.path.join(output_path, tile_id + '_' + product_request + '.tar')
         logging.info('Create product %s', output_archive)
-        required_bands = config.determine_output_products(producers, product_request)
-        included = [outputs[x] for x in required_bands.keys() + ['_LINEAGE']]
+        included = producers['package'][product_request]
         included.append(outputs['XML'][product_request])
         util.tar_archive(output_archive, included)
     logger.info('    End zipping')
