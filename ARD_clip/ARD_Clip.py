@@ -49,6 +49,7 @@ def process_tile(current_tile, segment, region, tiles_contrib_scenes, output_pat
         wildcard = '{wrspath}{wrsrow}_{acqdate}'.format(**contrib_record)
         logger.debug("          Contributing scene: %s", wildcard)
 
+        provided_contrib_rec = []
         if wildcard in segment['LANDSAT_PRODUCT_ID']:
             provided_contrib_rec = {segment['LANDSAT_PRODUCT_ID']: segment['FILE_LOC']}
             logger.info("Contributing scene from segment: %s", provided_contrib_rec)
