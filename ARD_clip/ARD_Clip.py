@@ -34,7 +34,7 @@ def process_tile(current_tile, segment, region, tiles_contrib_scenes, output_pat
 
     if len(tile_rec) != 0:
         logger.error('Tile already created! %s', tile_rec)
-        return 'ERROR'
+        raise ArdTileException
 
     logger.info("Create Tile %s", tile_id)
 
@@ -76,7 +76,7 @@ def process_tile(current_tile, segment, region, tiles_contrib_scenes, output_pat
                               or (n_contrib_scenes < conf.minscenespertile))
     if invalid_contrib_scenes:
         logger.info('Unexpected number of scenes %d', n_contrib_scenes)
-        return  "ERROR"
+        raise ArdTileException
 
 
     if conf.hsmstage:
@@ -92,7 +92,7 @@ def process_tile(current_tile, segment, region, tiles_contrib_scenes, output_pat
             scene_dir = util.untar_archive(tar_file_location, directory=directory)
         except:
             logger.exception('Error staging input data for {}: {}'.format(product_id, tar_file_location))
-            return 'ERROR'
+            raise ArdTileException
 
     logger.info('Starting to build tile: %s', tile_id)
 
@@ -397,8 +397,7 @@ def process_lineage_contributing(lineage_filename, n_contrib_scenes, tile_id, wo
 
     if (count == 0):
         logger.error('Parsing histogram from lineage file found 0 contributing scenes')
-        # Insert tile into db and record it as "NOT NEEDED" i.e it's an empty tile
-        return "NOT NEEDED"
+        raise ArdTileNotNeededException()
 
 
     # decrement pixel values in lineage file if some scenes didn't contribute
@@ -694,6 +693,15 @@ def process_browse(bands, workdir, tile_id, outpath):
         logger.error('Processing failed to generate desired output: %s', browse_filename)
     return browse_filename
 
+class ArdTileNotNeededException(Exception):
+    """ Lineage found All-Fill inside sensor field of view """
+    pass
+
+
+class ArdTileException(Exception):
+    """ An unrecoverable error has occurred """
+    pass
+
 
 def process_segment(segment, output_path, conf):
 
@@ -730,11 +738,17 @@ def process_segment(segment, output_path, conf):
     for current_tile in hv_tiles:
         try:
             tile_state = process_tile(current_tile, segment, region, tile_scenes, output_path, conf)
-        except:
+        except ArdTileNotNeededException:
+            logger.warning('Lineage file found 0 contributing scenes, set to NOT NEEDED')
+            tile_state = 'NOT NEEDED'
+        except ArdTileException:
+            logger.exception('Error caught while processing tile {} !'.format(current_tile))
+            tile_state = 'ERROR'
+        except Exception:
             logger.exception('Unexpected error processing tile {} !'.format(current_tile))
             tile_state = 'ERROR'
 
-        if tile_state == 'ERROR':
+        if tile_state in ('ERROR', 'NOT NEEDED'):
             scene_state = tile_state
             # update PROCESSING_STATE in ARD_PROCESSED_SCENES
             db.update_scene_state(db.connection(conf.connstr), segment['LANDSAT_PRODUCT_ID'], scene_state)
