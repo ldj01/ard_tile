@@ -249,7 +249,7 @@ def buildMetadata(metadata_filename, bit_counts, clip_extents, tile_id, metadata
         scene_id = getL1Value(L1Tuple[i], "LANDSAT_SCENE_ID")
         elev_src = getL1Value(L1Tuple[i], "ELEVATION_SOURCE")
 
-        if tile_id.startswith('LC08'):
+        if any(tile_id.startswith(x) for x in ('LT04', 'LT05', 'LE07')):
             sensor_mode = getL1Value(L1Tuple[i], "SENSOR_MODE")
             ephemeris_type = getL1Value(L1Tuple[i], "EPHEMERIS_TYPE")
 
