@@ -646,7 +646,10 @@ def process_output(products, producers, outputs, tile_id, output_path):
     for product_request in sorted(products, reverse=True):
         output_archive = os.path.join(output_path, tile_id + '_' + product_request + '.tar')
         logging.info('Create product %s', output_archive)
-        included = producers['package'][product_request]
+        required = producers['package'][product_request]
+        included = [o for o in outputs.values()
+                    if any([r in o for r in required])
+                       and isinstance(o, str)]
         included.append(outputs['XML'][product_request])
         util.tar_archive(output_archive, included)
     logger.info('    End zipping')
