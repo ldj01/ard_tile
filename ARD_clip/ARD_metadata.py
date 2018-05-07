@@ -286,7 +286,7 @@ def buildMetadata(metadata_filename, bit_counts, clip_extents, tile_id, metadata
                 outGeneric = ET.SubElement(outSceneGlobal, 'elevation_source')
                 outGeneric.text = elev_src
 
-                if tile_id.startswith('LC08'):
+                if any(tile_id.startswith(x) for x in ('LT04', 'LT05', 'LE07')):
                     outGeneric = ET.SubElement(outSceneGlobal, 'sensor_mode')
                     outGeneric.text = sensor_mode
                     outGeneric = ET.SubElement(outSceneGlobal, 'ephemeris_type')
