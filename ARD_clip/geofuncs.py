@@ -265,7 +265,7 @@ def get_tile_scene_intersections(connection, product_id, region, n=2):
                         if key not in tilepath_scenes:
                             tilepath_scenes[key] = list()
 
-                        tilepath_scenes[key].append(landsat.match(product_id))
+                        tilepath_scenes[key].append(landsat.match(name))
 
     logger.info('Tile list: {0}'.format(tile_list))
     logger.info('Neighboring scenes: {0}'.format(tilepath_scenes))
