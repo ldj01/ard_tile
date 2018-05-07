@@ -1,8 +1,10 @@
 """ This program determines consecutive scenes to be tiled """
 
+import re
 import glob
 from operator import itemgetter
 from itertools import groupby
+from functools import partial
 
 
 from util import logger
@@ -62,10 +64,36 @@ def segments_group_list(reform_list):
     ]
 
 
+def format_segment(record, indir='', force_input_dir='', ):
+    """ Search filesystem for complete file name matching FILE_LOC glob """
+    regex = re.compile(indir)
+    file_loc = regex.sub(force_input_dir or indir,
+                         record['FILE_LOC'])
+    logger.debug('Search for file location: %s', file_loc)
+    tarFileName = glob.glob(file_loc)
+    if len(tarFileName) > 0:
+        return {k: (v if k != 'FILE_LOC' else tarFileName[0])
+                for k,v in record.items()}
+
+
+def filter_dups(records):
+    """ Separate duplicate matches """
+    key = lambda x: x['FILE_LOC']
+    groups = groupby(sorted(records, key=key), key)
+    groups = [(k, list(m)) for k,m in groups]
+    reals, dups = list(), list()
+    p_dup = lambda x: (x['LANDSAT_PRODUCT_ID'], x['FILE_LOC'], 'DUPLICATE')
+    for file_loc, matches in groups:
+        if len(list(matches)) > 1:
+            logger.warning('Duplicate matches for [ %s ]: %s', file_loc, list(matches))
+            dups.extend(map(p_dup,  list(matches)[1:]))
+        reals.append(list(matches)[0])
+    return dups, reals
+
+
 def determine_segments(l2_db_con='', segment_query='', indir='', outdir='', force_input_dir=None, **kwargs):
 
-    connection = db.connection(l2_db_con)
-    scenes_to_process = db.select(connection, segment_query)
+    scenes_to_process = db.select(db.connection(l2_db_con), segment_query)
 
     logger.info("Number of scenes returned from query: {0}".format(len(scenes_to_process)))
     logger.debug("Complete scene list: {0}".format(scenes_to_process))
@@ -75,27 +103,15 @@ def determine_segments(l2_db_con='', segment_query='', indir='', outdir='', forc
         logger.info("There are no scenes ready to process.")
         return segments
 
-    reformatted_list = []
-    dup_scene_list = []
-    prev_file_loc = "init"
+    fmt_segment = partial(format_segment, indir=indir,
+                          force_input_dir=force_input_dir)
+    segments = map(fmt_segment, scenes_to_process)
+    dup_scenes, segments = filter_dups(segments)
 
-    for record in scenes_to_process:
-        # Get complete file name
-        file_loc = record['FILE_LOC'].replace(indir, force_input_dir or indir)
-        logger.debug('Search for file location: %s', file_loc)
-        tarFileName = glob.glob(file_loc)
-        if len(tarFileName) > 0:
-            if tarFileName[0] != prev_file_loc:
-                reformatted_list.append({k: (v if k != 'FILE_LOC' else tarFileName[0]) for k,v in record.items()})
-            else:
-                dup_scene_row = (record['LANDSAT_PRODUCT_ID'], tarFileName[0], 'DUPLICATE')
-                dup_scene_list.append(dup_scene_row)
-            prev_file_loc = tarFileName[0]
+    db.duplicate_scenes_insert(db.connection(l2_db_con), dup_scenes)
 
-    db.duplicate_scenes_insert(connection, dup_scene_list)
+    segments = segments_group_list(segments)
+    segments.sort(reverse=True, key=len)
+    logger.info("Number of segments found: {0}".format(len(segments)))
 
-    segments_list = segments_group_list(reformatted_list)
-    segments_list.sort(reverse=True, key=len)
-    logger.info("Number of segments found: {0}".format(len(segments_list)))
-
-    return segments_list
+    return segments
