@@ -131,10 +131,10 @@ def process_tile(current_tile, segment, region, tiles_contrib_scenes, output_pat
             filename = datatypes[dtype](stacking, band_name, clip_extents, tile_id, rename, conf.workdir)
             outputs[band_name] = filename
 
-            if band_name == 'toa_band1':
+            if band_name == 'toa_band1': # WARNING: Assume LINEAGE will always be present!
                 outputs['LINEAGEQA'] = process_lineage(stacking, band_name, clip_extents, tile_id, 'LINEAGEQA', conf.workdir)
-                lng_count, lng_array = process_lineage_contributing(outputs['LINEAGEQA'], n_contrib_scenes, tile_id, conf.workdir)
 
+    lng_count, lng_array = process_lineage_contributing(outputs['LINEAGEQA'], n_contrib_scenes, tile_id, conf.workdir)
     outputs['XML'] = process_metadata(segment, stacking, tile_id, clip_extents, region, lng_count, lng_array,
                                       production_timestamp, producers, outputs, conf.workdir)
 
@@ -513,8 +513,8 @@ def process_bandtype_7(stacking, band_name, clip_extents, tile_id, rename, workd
     for level, stack in stacking.items():
         scene_name = util.ffind(workdir, stack['LANDSAT_PRODUCT_ID'], '*' + band_name + '.tif')
 
-        temp_name1 =  os.path.join(workdir, tile_id, tile_id + '_temp%d' % level + '.tif')
-        temp_warp_cmd = 'gdalwarp -te {extents} -dstnodata "1" -srcnodata "1"  {0} {1}'
+        temp_name1 =  mosaic_filename.replace('.tif', '_temp%d' % level + '.tif')
+        temp_warp_cmd = 'gdalwarp -te {extents} -dstnodata "0" -srcnodata "1"  {0} {1}'
         util.execute_cmd(temp_warp_cmd.format(scene_name, temp_name1, extents=clip_extents))
         temp_clipped_names.append(temp_name1)
 
@@ -522,7 +522,7 @@ def process_bandtype_7(stacking, band_name, clip_extents, tile_id, rename, workd
         temp_name2 =  os.path.join(workdir, tile_id, tile_id + '_temp%dM' % level + '.tif')
         temp_calc_cmd = (
             'gdal_calc.py -A {0} -B {lineage} --outfile {1} --calc="A*(B=={level})" '
-            ' --NoDataValue=1'
+            ' --NoDataValue=0'
         )
         util.execute_cmd(temp_calc_cmd.format(temp_name1, temp_name2, lineage=lineg_name, level=level))
         temp_masked_names.append(temp_name2)
@@ -533,7 +533,7 @@ def process_bandtype_7(stacking, band_name, clip_extents, tile_id, rename, workd
     util.remove(*temp_masked_names + temp_clipped_names)
 
     warp_cmd = (
-        'gdalwarp -dstnodata "1" -srcnodata "1" -co "compress=deflate"'
+        'gdalwarp -dstnodata "1" -srcnodata "0" -co "compress=deflate"'
         ' -co "zlevel=9" -co "tiled=yes" -co "predictor=2" {} {}'
     )
     util.execute_cmd(warp_cmd.format(temp_name, mosaic_filename))
@@ -561,8 +561,8 @@ def process_bandtype_8(stacking, band_name, clip_extents, tile_id, rename, workd
     for level, stack in stacking.items():
         scene_name = util.ffind(workdir, stack['LANDSAT_PRODUCT_ID'], '*' + band_name + '.tif')
 
-        temp_name1 =  os.path.join(workdir, tile_id, tile_id + '_temp%d' % level + '.tif')
-        temp_warp_cmd = 'gdalwarp -te {extents} -dstnodata "-9999" -srcnodata "-9999"  {0} {1}'
+        temp_name1 =  mosaic_filename.replace('.tif', '_temp%d' % level + '.tif')
+        temp_warp_cmd = 'gdalwarp -te {extents} -dstnodata "0" -srcnodata "-9999"  {0} {1}'
         util.execute_cmd(temp_warp_cmd.format(scene_name, temp_name1, extents=clip_extents))
         temp_clipped_names.append(temp_name1)
 
@@ -570,7 +570,7 @@ def process_bandtype_8(stacking, band_name, clip_extents, tile_id, rename, workd
         temp_name2 =  os.path.join(workdir, tile_id, tile_id + '_temp%dM' % level + '.tif')
         temp_calc_cmd = (
             'gdal_calc.py -A {0} -B {lineage} --outfile {1} --calc="A*(B=={level})" '
-            ' --NoDataValue=-9999'
+            ' --NoDataValue=0'
         )
         util.execute_cmd(temp_calc_cmd.format(temp_name1, temp_name2, lineage=lineg_name, level=level))
         temp_masked_names.append(temp_name2)
@@ -581,7 +581,7 @@ def process_bandtype_8(stacking, band_name, clip_extents, tile_id, rename, workd
     util.remove(*temp_masked_names + temp_clipped_names)
 
     warp_cmd = (
-        'gdalwarp -dstnodata "-9999" -srcnodata "-9999" -co "compress=deflate"'
+        'gdalwarp -dstnodata "-9999" -srcnodata "0" -co "compress=deflate"'
         ' -co "zlevel=9" -co "tiled=yes" -co "predictor=2" {} {}'
     )
     util.execute_cmd(warp_cmd.format(temp_name, mosaic_filename))
