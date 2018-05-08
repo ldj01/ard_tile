@@ -242,7 +242,7 @@ def process_bandtype_3(stacking, band_name, clip_extents, tile_id, rename, workd
         scene_name = util.ffind(workdir, stack['LANDSAT_PRODUCT_ID'], '*' + band_name + '.tif')
         warp_cmd += ' ' + scene_name
 
-    temp_filename =  os.path.join(workdir, tile_id, tile_id + '_' + rename + '.tif')
+    temp_filename =  mosaic_filename.replace('.tif', '_temp.tif')
     warp_cmd += ' ' + temp_filename
     util.execute_cmd(warp_cmd)
 
@@ -285,7 +285,7 @@ def process_bandtype_4(stacking, band_name, clip_extents, tile_id, rename, workd
 
     temp_names = list()
     for level, stack in stacking.items():
-        temp_name =  os.path.join(workdir, tile_id, tile_id + '_temp%d' % level + '.tif')
+        temp_name =  mosaic_filename.replace('.tif', '_temp%d' % level + '.tif')
         scene_name = util.ffind(workdir, stack['LANDSAT_PRODUCT_ID'], '*' + band_name + '.tif')
         temp_warp_cmd = warp_cmd + ' ' + clip_params +  scene_name + ' ' + temp_name
         util.execute_cmd(temp_warp_cmd)
@@ -318,7 +318,7 @@ def process_bandtype_5(stacking, band_name, clip_extents, tile_id, rename, workd
 
     temp_names = list()
     for level, stack in stacking.items():
-        temp_name =  os.path.join(workdir, tile_id, tile_id + '_temp%d' % level + '.tif')
+        temp_name =  mosaic_filename.replace('.tif', '_temp%d' % level + '.tif')
         scene_name = util.ffind(workdir, stack['LANDSAT_PRODUCT_ID'], '*' + band_name + '.tif')
         temp_warp_cmd = warp_cmd + ' ' + clip_params +  scene_name + ' ' + temp_name
         util.execute_cmd(temp_warp_cmd)
@@ -348,7 +348,7 @@ def process_lineage(stacking, band_name, clip_extents, tile_id, rename, workdir)
 
     temp_names = list()
     for level, stack in stacking.items():
-        temp_name =  os.path.join(workdir, tile_id, tile_id + '_srcTemp%d' % level + '.tif')
+        temp_name =  lineage_filename.replace('.tif', '_srcTemp%d' % level + '.tif')
         scene_name = util.ffind(workdir, stack['LANDSAT_PRODUCT_ID'], '*' + band_name + '.tif')
 
         calc_cmd = (
@@ -466,12 +466,12 @@ def process_bandtype_6(stacking, band_name, clip_extents, tile_id, rename, workd
         scene_name = util.ffind(workdir, stack['LANDSAT_PRODUCT_ID'], '*' + band_name + '.tif')
         lineg_name = util.ffind(workdir, tile_id, '*LINEAGEQA.tif')
 
-        temp_name1 =  os.path.join(workdir, tile_id, tile_id + '_temp%d' % level + '.tif')
+        temp_name1 =  mosaic_filename.replace('.tif', '_temp%d' % level + '.tif')
         temp_warp_cmd = 'gdalwarp -te {extents} -dstnodata "0" -ot "Byte" -wt "Byte" {0} {1}'
         util.execute_cmd(temp_warp_cmd.format(scene_name, temp_name1, extents=clip_extents))
         temp_clipped_names.append(temp_name1)
 
-        temp_name2 =  os.path.join(workdir, tile_id, tile_id + '_temp%dM' % level + '.tif')
+        temp_name2 =  mosaic_filename.replace('.tif', '_temp%dM' % level + '.tif')
         temp_calc_cmd = (
             'gdal_calc.py -A {0} -B {lineage} --outfile {1} --calc="A*(B=={level})" '
             '--type="Byte" --NoDataValue=0'
@@ -479,7 +479,7 @@ def process_bandtype_6(stacking, band_name, clip_extents, tile_id, rename, workd
         util.execute_cmd(temp_calc_cmd.format(temp_name1, temp_name2, lineage=lineg_name, level=level))
         temp_masked_names.append(temp_name2)
 
-    temp_name =  os.path.join(workdir, tile_id, tile_id + '_temp.tif')
+    temp_name =  mosaic_filename.replace('.tif', '_temp.tif')
     temp_warp_cmd = 'gdalwarp {} {}'.format(' '.join(temp_masked_names), temp_name)
     util.execute_cmd(temp_warp_cmd)
     util.remove(*temp_masked_names + temp_clipped_names)
@@ -519,7 +519,7 @@ def process_bandtype_7(stacking, band_name, clip_extents, tile_id, rename, workd
         temp_clipped_names.append(temp_name1)
 
         lineg_name = util.ffind(workdir, tile_id, '*LINEAGEQA.tif')
-        temp_name2 =  os.path.join(workdir, tile_id, tile_id + '_temp%dM' % level + '.tif')
+        temp_name2 =  mosaic_filename.replace('.tif', '_temp%dM' % level + '.tif')
         temp_calc_cmd = (
             'gdal_calc.py -A {0} -B {lineage} --outfile {1} --calc="A*(B=={level})" '
             ' --NoDataValue=0'
@@ -527,7 +527,7 @@ def process_bandtype_7(stacking, band_name, clip_extents, tile_id, rename, workd
         util.execute_cmd(temp_calc_cmd.format(temp_name1, temp_name2, lineage=lineg_name, level=level))
         temp_masked_names.append(temp_name2)
 
-    temp_name =  os.path.join(workdir, tile_id, tile_id + '_temp.tif')
+    temp_name =  mosaic_filename.replace('.tif', '_temp.tif')
     temp_warp_cmd = 'gdalwarp {} {}'.format(' '.join(temp_masked_names), temp_name)
     util.execute_cmd(temp_warp_cmd)
     util.remove(*temp_masked_names + temp_clipped_names)
@@ -567,7 +567,7 @@ def process_bandtype_8(stacking, band_name, clip_extents, tile_id, rename, workd
         temp_clipped_names.append(temp_name1)
 
         lineg_name = util.ffind(workdir, tile_id, '*LINEAGEQA.tif')
-        temp_name2 =  os.path.join(workdir, tile_id, tile_id + '_temp%dM' % level + '.tif')
+        temp_name2 =  mosaic_filename.replace('.tif', '_temp%dM' % level + '.tif')
         temp_calc_cmd = (
             'gdal_calc.py -A {0} -B {lineage} --outfile {1} --calc="A*(B=={level})" '
             ' --NoDataValue=0'
@@ -575,7 +575,7 @@ def process_bandtype_8(stacking, band_name, clip_extents, tile_id, rename, workd
         util.execute_cmd(temp_calc_cmd.format(temp_name1, temp_name2, lineage=lineg_name, level=level))
         temp_masked_names.append(temp_name2)
 
-    temp_name =  os.path.join(workdir, tile_id, tile_id + '_temp.tif')
+    temp_name =  mosaic_filename.replace('.tif', '_temp.tif')
     temp_warp_cmd = 'gdalwarp {} {}'.format(' '.join(temp_masked_names), temp_name)
     util.execute_cmd(temp_warp_cmd)
     util.remove(*temp_masked_names + temp_clipped_names)
@@ -670,12 +670,12 @@ def process_browse(bands, workdir, tile_id, outpath):
              for k, v in bands.items()}
 
     # create RGB image
-    temp_filename1 = os.path.join(workdir, tile_id, tile_id + '_brw1.tif')
+    temp_filename1 = browse_filename.replace('.tif', '_brw1.tif')
     merge_cmd = 'gdal_merge.py -o {outfile} -separate {red} {green} {blue}'
     util.execute_cmd(merge_cmd.format(outfile=temp_filename1, **bands))
 
     # scale the pixel values
-    temp_filename2 = os.path.join(workdir, tile_id, tile_id + '_brw2.tif')
+    temp_filename2 = browse_filename.replace('.tif', '_brw2.tif')
     scale_cmd = 'gdal_translate -scale 0 10000 -ot Byte {} {}'
     util.execute_cmd(scale_cmd.format(temp_filename1, temp_filename2))
 
