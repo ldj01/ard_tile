@@ -86,7 +86,7 @@ LE07: &l457
     "[ TYPE: UInt8 ][ RANGE: 0,255 ][ FILL: NA ][ +LINEAGE ]":
       - sr_cloud_qa
 
-    "[ TYPE: UInt8 ][ RANGE: 0,255 ][ FILL: 255 ][ +LINEAGE ]":
+    "[ TYPE: Int16 ][ RANGE: 0,255 ][ FILL: -9999 ][ +LINEAGE ]":
       - hillshade
 
     "[ TYPE: Int16 ][ RANGE: ??? ][ FILL: -9999 ][ +LINEAGE ]":
@@ -210,7 +210,7 @@ LC08:
       - dswe_mask
       - dswe_pshsccss
 
-    "[ TYPE: UInt8 ][ RANGE: 0,255 ][ FILL: 255 ][ +LINEAGE ]":
+    "[ TYPE: Int16 ][ RANGE: 0,255 ][ FILL: -9999 ][ +LINEAGE ]":
       - hillshade
 
     "[ TYPE: Int16 ][ RANGE: ??? ][ FILL: -9999 ][ +LINEAGE ]":

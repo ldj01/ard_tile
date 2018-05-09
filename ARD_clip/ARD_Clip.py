@@ -125,8 +125,8 @@ def process_tile(current_tile, segment, region, tiles_contrib_scenes, output_pat
             direct_clip,
         "[ TYPE: UInt8 ][ RANGE: 0,255 ][ FILL: NA ][ +LINEAGE ]":
             fill_zero_na_lineage,
-        "[ TYPE: UInt8 ][ RANGE: 0,255 ][ FILL: 255 ][ +LINEAGE ]":
-            calc_nodata_255_lineage,
+        "[ TYPE: Int16 ][ RANGE: 0,255 ][ FILL: -9999 ][ +LINEAGE ]":
+            calc_nodata_9999_uint_lineage,
         "[ TYPE: Int16 ][ RANGE: ??? ][ FILL: -9999 ][ +LINEAGE ]":
             calc_nodata_9999_lineage,
     }
@@ -359,7 +359,7 @@ def fill_zero_na_lineage(stacking, band_name, clip_extents, tile_id, rename, wor
     return mosaic_filename
 
 
-def calc_nodata_255_lineage(stacking, band_name, clip_extents, tile_id, rename, workdir):
+def calc_nodata_9999_uint_lineage(stacking, band_name, clip_extents, tile_id, rename, workdir):
     """ Band Type 7 NoData 255 and uses LINEAGE """
 
     logger.info('     Start processing for band: %s', band_name)
@@ -376,7 +376,7 @@ def calc_nodata_255_lineage(stacking, band_name, clip_extents, tile_id, rename, 
         scene_name = util.ffind(workdir, stack['LANDSAT_PRODUCT_ID'], '*' + band_name + '.tif')
 
         temp_name1 =  mosaic_filename.replace('.tif', '_temp%d' % level + '.tif')
-        temp_warp_cmd = 'gdalwarp -te {extents} -dstnodata "255" -srcnodata "255"  {0} {1}'
+        temp_warp_cmd = 'gdalwarp -te {extents} -ot "Int16" -dstnodata "-9999" -srcnodata "None"  {0} {1}'
         util.execute_cmd(temp_warp_cmd.format(scene_name, temp_name1, extents=clip_extents))
         temp_clipped_names.append(temp_name1)
 
@@ -384,8 +384,8 @@ def calc_nodata_255_lineage(stacking, band_name, clip_extents, tile_id, rename, 
         temp_name2 =  mosaic_filename.replace('.tif', '_temp%dM' % level + '.tif')
         temp_calc_cmd = (
             'gdal_calc.py -A {0} -B {lineage} --outfile {1}'
-            ' --calc="(A*(B=={level}) + (255*(B!={level})))"'
-            ' --NoDataValue=255'
+            ' --calc="(A*(B=={level}) + (-9999*(B!={level})))"'
+            ' --NoDataValue=-9999'
         )
         util.execute_cmd(temp_calc_cmd.format(temp_name1, temp_name2, lineage=lineg_name, level=level))
         temp_masked_names.append(temp_name2)
@@ -396,7 +396,7 @@ def calc_nodata_255_lineage(stacking, band_name, clip_extents, tile_id, rename, 
     util.remove(*temp_masked_names + temp_clipped_names)
 
     warp_cmd = (
-        'gdalwarp -dstnodata "255" -srcnodata "255" -co "compress=deflate"'
+        'gdalwarp -dstnodata "-9999" -srcnodata "-9999" -co "compress=deflate"'
         ' -co "zlevel=9" -co "tiled=yes" -co "predictor=2" {} {}'
     )
     util.execute_cmd(warp_cmd.format(temp_name, mosaic_filename))
