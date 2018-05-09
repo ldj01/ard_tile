@@ -501,6 +501,13 @@ def fixTileBand2(tileID, filenames, productionDateTime, bandTag):
     newName = filenames[nameOnly].split('_')[-1].split('.')[0]
     newName = 'name="%s"' % newName
 
+
+    if nameOnly == 'hillshade':                                 # FIXME: this done based on time constraints
+                                                                # FIXME: modify band attribute="UINT8" to int16
+        bandTag = bandTag.replace('data_type="UINT8"', 'data_type="INT16"')
+                                                                # FIXME: modify fill_value="255" to -9999
+        bandTag = bandTag.replace('fill_value="255"', 'fill_value="-9999"')
+
                                                                  # 2. in the file_name tag
     startFilePos = bandTag.find('<file_name>', 0)
     endFilePos = bandTag.find('</file_name>', startFilePos)
