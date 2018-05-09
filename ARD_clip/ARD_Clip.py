@@ -181,166 +181,16 @@ def direct_clip(stacking, band_name, clip_extents, tile_id, rename, workdir):
         logger.warning("Skip previously generated result %s", mosaic_filename)
         return mosaic_filename
 
-    clip_params = ' -dstnodata "-9999" -srcnodata "-9999" '
-    clip_params += '-co "compress=deflate" -co "zlevel=9" -co "tiled=yes" -co "predictor=2" '
-
-    warp_cmd = 'gdalwarp -te ' + clip_extents + clip_params
-    for level, stack in stacking.items():
-        scene_name = util.ffind(workdir, stack['LANDSAT_PRODUCT_ID'], '*' + band_name + '.tif')
-        warp_cmd += ' ' + scene_name
-    warp_cmd += ' ' + mosaic_filename
-    util.execute_cmd(warp_cmd)
-
-    logger.info('    End processing for %s as %s ', band_name, mosaic_filename)
-    if not os.path.exists(mosaic_filename):
-        logger.error('Processing failed to generate desired output: %s', mosaic_filename)
-    return mosaic_filename
-
-
-def process_bandtype_2(stacking, band_name, clip_extents, tile_id, rename, workdir):
-    # --------------------------------------------------------------------------------------------------------------------------- #
-    #
-    #     Band Type 2
-    #
-    #                   16 bit signed integer
-    #     		NoData = -32768
-    #
-    logger.info('     Start processing for band: %s', band_name)
-
-    mosaic_filename =  os.path.join(workdir, tile_id, tile_id + '_' + rename + '.tif')
-
-    if os.path.exists(mosaic_filename):
-        logger.warning("Skip previously generated result %s", mosaic_filename)
-        return mosaic_filename
-
-    clip_params = ' -dstnodata "-32768" -srcnodata "-32768" '
-    clip_params += '-co "compress=deflate" -co "zlevel=9" -co "tiled=yes" -co "predictor=2" '
-
-    warp_cmd = 'gdalwarp -te ' + clip_extents + clip_params
-    for level, stack in stacking.items():
-        scene_name = util.ffind(workdir, stack['LANDSAT_PRODUCT_ID'], '*' + band_name + '.tif')
-        warp_cmd += ' ' + scene_name
-    warp_cmd += ' ' + mosaic_filename
-    util.execute_cmd(warp_cmd)
-
-    logger.info('    End processing for %s as %s ', band_name, mosaic_filename)
-    if not os.path.exists(mosaic_filename):
-        logger.error('Processing failed to generate desired output: %s', mosaic_filename)
-    return mosaic_filename
-
-
-def process_bandtype_3(stacking, band_name, clip_extents, tile_id, rename, workdir):
-    # --------------------------------------------------------------------------------------------------------------------------- #
-    #
-    #     Band Type 3
-    #
-    #     		16 bit unsigned integer
-    #		NoData = 1  in ovelap areas and scan gaps
-    #
-    #
-    logger.info('     Start processing for band: %s', band_name)
-
-    mosaic_filename =  os.path.join(workdir, tile_id, tile_id + '_' + rename + '.tif')
-
-    if os.path.exists(mosaic_filename):
-        logger.warning("Skip previously generated result %s", mosaic_filename)
-        return mosaic_filename
-
-
-    warp_cmd = 'gdalwarp -te ' + clip_extents
-    warp_cmd += ' -dstnodata "1" -srcnodata "1" '
+    warp_cmd = (
+        'gdalwarp -te {extents}'
+        ' -co "compress=deflate" -co "zlevel=9" -co "tiled=yes" -co "predictor=2"'
+    ).format(extents=clip_extents)
 
     for level, stack in stacking.items():
         scene_name = util.ffind(workdir, stack['LANDSAT_PRODUCT_ID'], '*' + band_name + '.tif')
         warp_cmd += ' ' + scene_name
-
-    temp_filename =  mosaic_filename.replace('.tif', '_temp.tif')
-    warp_cmd += ' ' + temp_filename
-    util.execute_cmd(warp_cmd)
-
-    # reassign nodata
-    warp_cmd = 'gdalwarp -dstnodata "0" -srcnodata "None" '
-    warp_cmd += '-co "compress=deflate" -co "zlevel=9" -co "tiled=yes" -co "predictor=2" '
-    warp_cmd += temp_filename + ' ' + mosaic_filename
-    util.execute_cmd(warp_cmd)
-
-    util.remove(temp_filename)
-
-    logger.info('    End processing for %s as %s ', band_name, mosaic_filename)
-    if not os.path.exists(mosaic_filename):
-        logger.error('Processing failed to generate desired output: %s', mosaic_filename)
-    return mosaic_filename
-
-
-def process_bandtype_4(stacking, band_name, clip_extents, tile_id, rename, workdir):
-    # --------------------------------------------------------------------------------------------------------------------------- #
-    #
-    #     Band Type 4
-    #
-    #     In the source scenes, these bands are:
-    #
-    #		8 bit unsigned integer
-    #                   NoData = 1   in overlap area and within scene footprint
-    #		Valid data = 0 - 255
-    #
-    #
-    logger.info('     Start processing for band: %s', band_name)
-
-    mosaic_filename =  os.path.join(workdir, tile_id, tile_id + '_' + rename + '.tif')
-
-    if os.path.exists(mosaic_filename):
-        logger.warning("Skip previously generated result %s", mosaic_filename)
-        return mosaic_filename
-
-    warp_cmd = 'gdalwarp -te ' + clip_extents
-    clip_params = ' -dstnodata "1" -srcnodata "1" '
-
-    temp_names = list()
-    for level, stack in stacking.items():
-        temp_name =  mosaic_filename.replace('.tif', '_temp%d' % level + '.tif')
-        scene_name = util.ffind(workdir, stack['LANDSAT_PRODUCT_ID'], '*' + band_name + '.tif')
-        temp_warp_cmd = warp_cmd + ' ' + clip_params +  scene_name + ' ' + temp_name
-        util.execute_cmd(temp_warp_cmd)
-        temp_names.append(temp_name)
-
-    warp_cmd = 'gdalwarp -co "compress=deflate" -co "zlevel=9" -co "tiled=yes" -co "predictor=2" '
-    warp_cmd += ' '.join(temp_names)
     warp_cmd += ' ' + mosaic_filename
     util.execute_cmd(warp_cmd)
-    util.remove(*temp_names)
-
-    logger.info('    End processing for %s as %s ', band_name, mosaic_filename)
-    if not os.path.exists(mosaic_filename):
-        logger.error('Processing failed to generate desired output: %s', mosaic_filename)
-    return mosaic_filename
-
-
-def process_bandtype_5(stacking, band_name, clip_extents, tile_id, rename, workdir):
-    """ Band Type 5 DSWE NoData Convert from 255 to -9999 """
-    logger.info('     Start processing for band: %s', band_name)
-
-    mosaic_filename =  os.path.join(workdir, tile_id, tile_id + '_' + rename + '.tif')
-
-    if os.path.exists(mosaic_filename):
-        logger.warning("Skip previously generated result %s", mosaic_filename)
-        return mosaic_filename
-
-    warp_cmd = 'gdalwarp -te ' + clip_extents
-    clip_params = ' -dstnodata "-9999" -srcnodata "255" '
-
-    temp_names = list()
-    for level, stack in stacking.items():
-        temp_name =  mosaic_filename.replace('.tif', '_temp%d' % level + '.tif')
-        scene_name = util.ffind(workdir, stack['LANDSAT_PRODUCT_ID'], '*' + band_name + '.tif')
-        temp_warp_cmd = warp_cmd + ' ' + clip_params +  scene_name + ' ' + temp_name
-        util.execute_cmd(temp_warp_cmd)
-        temp_names.append(temp_name)
-
-    warp_cmd = 'gdalwarp -co "compress=deflate" -co "zlevel=9" -co "tiled=yes" -co "predictor=2" '
-    warp_cmd += ' '.join(temp_names)
-    warp_cmd += ' ' + mosaic_filename
-    util.execute_cmd(warp_cmd)
-    util.remove(*temp_names)
 
     logger.info('    End processing for %s as %s ', band_name, mosaic_filename)
     if not os.path.exists(mosaic_filename):
@@ -526,15 +376,16 @@ def calc_nodata_255_lineage(stacking, band_name, clip_extents, tile_id, rename, 
         scene_name = util.ffind(workdir, stack['LANDSAT_PRODUCT_ID'], '*' + band_name + '.tif')
 
         temp_name1 =  mosaic_filename.replace('.tif', '_temp%d' % level + '.tif')
-        temp_warp_cmd = 'gdalwarp -te {extents} -dstnodata "0" -srcnodata "1"  {0} {1}'
+        temp_warp_cmd = 'gdalwarp -te {extents} -dstnodata "255" -srcnodata "255"  {0} {1}'
         util.execute_cmd(temp_warp_cmd.format(scene_name, temp_name1, extents=clip_extents))
         temp_clipped_names.append(temp_name1)
 
         lineg_name = util.ffind(workdir, tile_id, '*LINEAGEQA.tif')
         temp_name2 =  mosaic_filename.replace('.tif', '_temp%dM' % level + '.tif')
         temp_calc_cmd = (
-            'gdal_calc.py -A {0} -B {lineage} --outfile {1} --calc="A*(B=={level})" '
-            ' --NoDataValue=0'
+            'gdal_calc.py -A {0} -B {lineage} --outfile {1}'
+            ' --calc="(A*(B=={level}) + (255*(B!={level})))"'
+            ' --NoDataValue=255'
         )
         util.execute_cmd(temp_calc_cmd.format(temp_name1, temp_name2, lineage=lineg_name, level=level))
         temp_masked_names.append(temp_name2)
@@ -545,7 +396,7 @@ def calc_nodata_255_lineage(stacking, band_name, clip_extents, tile_id, rename, 
     util.remove(*temp_masked_names + temp_clipped_names)
 
     warp_cmd = (
-        'gdalwarp -dstnodata "1" -srcnodata "0" -co "compress=deflate"'
+        'gdalwarp -dstnodata "255" -srcnodata "255" -co "compress=deflate"'
         ' -co "zlevel=9" -co "tiled=yes" -co "predictor=2" {} {}'
     )
     util.execute_cmd(warp_cmd.format(temp_name, mosaic_filename))
@@ -574,15 +425,16 @@ def calc_nodata_9999_lineage(stacking, band_name, clip_extents, tile_id, rename,
         scene_name = util.ffind(workdir, stack['LANDSAT_PRODUCT_ID'], '*' + band_name + '.tif')
 
         temp_name1 =  mosaic_filename.replace('.tif', '_temp%d' % level + '.tif')
-        temp_warp_cmd = 'gdalwarp -te {extents} -dstnodata "0" -srcnodata "-9999"  {0} {1}'
+        temp_warp_cmd = 'gdalwarp -te {extents} -dstnodata "-9999" -srcnodata "-9999" {0} {1}'
         util.execute_cmd(temp_warp_cmd.format(scene_name, temp_name1, extents=clip_extents))
         temp_clipped_names.append(temp_name1)
 
         lineg_name = util.ffind(workdir, tile_id, '*LINEAGEQA.tif')
         temp_name2 =  mosaic_filename.replace('.tif', '_temp%dM' % level + '.tif')
         temp_calc_cmd = (
-            'gdal_calc.py -A {0} -B {lineage} --outfile {1} --calc="A*(B=={level})" '
-            ' --NoDataValue=0'
+            'gdal_calc.py -A {0} -B {lineage} --outfile {1}'
+            ' --calc="(A*(B=={level}) + (-9999*(B!={level})))"'
+            ' --NoDataValue=-9999'
         )
         util.execute_cmd(temp_calc_cmd.format(temp_name1, temp_name2, lineage=lineg_name, level=level))
         temp_masked_names.append(temp_name2)
@@ -593,7 +445,7 @@ def calc_nodata_9999_lineage(stacking, band_name, clip_extents, tile_id, rename,
     util.remove(*temp_masked_names + temp_clipped_names)
 
     warp_cmd = (
-        'gdalwarp -dstnodata "-9999" -srcnodata "0" -co "compress=deflate"'
+        'gdalwarp -dstnodata "-9999" -srcnodata "-9999" -co "compress=deflate"'
         ' -co "zlevel=9" -co "tiled=yes" -co "predictor=2" {} {}'
     )
     util.execute_cmd(warp_cmd.format(temp_name, mosaic_filename))
