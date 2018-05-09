@@ -109,14 +109,26 @@ def process_tile(current_tile, segment, region, tiles_contrib_scenes, output_pat
     producers = config.read_processing_config(sensor=segment['SATELLITE'])
 
     datatypes = {
-        1: process_bandtype_1,
-        2: process_bandtype_2,
-        3: process_bandtype_3,
-        4: process_bandtype_4,
-        5: process_bandtype_5,
-        6: process_bandtype_6, # WARNING: Type 6 requires LINEAGE to be run first
-        7: process_bandtype_7, # WARNING: Type 7 requires LINEAGE to be run first
-        8: process_bandtype_8, # WARNING: Type 8 requires LINEAGE to be run first
+        "[ TYPE: Int16 ][ RANGE: -100,16000 ][ FILL: -9999 ]":
+            direct_clip,
+        "[ TYPE: Int16 ][ RANGE: -2000,16000 ][ FILL: -9999 ]":
+            direct_clip,
+        "[ TYPE: Int16 ][ RANGE: -32767,32767 ][ FILL: -32768 ]":
+            direct_clip,
+        "[ TYPE: Int16 ][ RANGE: ??? ][ FILL: -9999 ]":
+            direct_clip,
+        "[ TYPE: UInt16 ][ RANGE: 0,65535 ][ FILL: 1 ]":
+            direct_clip,
+        "[ TYPE: UInt8 ][ RANGE: 0,255 ][ FILL: 1 ]":
+            direct_clip,
+        "[ TYPE: UInt8 ][ RANGE: 0,255 ][ FILL: 255 ]":
+            direct_clip,
+        "[ TYPE: UInt8 ][ RANGE: 0,255 ][ FILL: NA ][ +LINEAGE ]":
+            fill_zero_na_lineage,
+        "[ TYPE: UInt8 ][ RANGE: 0,255 ][ FILL: 255 ][ +LINEAGE ]":
+            calc_nodata_255_lineage,
+        "[ TYPE: Int16 ][ RANGE: ??? ][ FILL: -9999 ][ +LINEAGE ]":
+            calc_nodata_9999_lineage,
     }
 
     outputs = dict()
@@ -153,7 +165,7 @@ def process_tile(current_tile, segment, region, tiles_contrib_scenes, output_pat
     return "SUCCESS"
 
 
-def process_bandtype_1(stacking, band_name, clip_extents, tile_id, rename, workdir):
+def direct_clip(stacking, band_name, clip_extents, tile_id, rename, workdir):
     # --------------------------------------------------------------------------------------------------------------------------- #
     #
     #     Band Type 1
@@ -437,7 +449,7 @@ def process_lineage_contributing(lineage_filename, n_contrib_scenes, tile_id, wo
     return count, array
 
 
-def process_bandtype_6(stacking, band_name, clip_extents, tile_id, rename, workdir):
+def fill_zero_na_lineage(stacking, band_name, clip_extents, tile_id, rename, workdir):
     # --------------------------------------------------------------------------------------------------------------------------- #
     #
     #     Band Type 6
@@ -497,7 +509,7 @@ def process_bandtype_6(stacking, band_name, clip_extents, tile_id, rename, workd
     return mosaic_filename
 
 
-def process_bandtype_7(stacking, band_name, clip_extents, tile_id, rename, workdir):
+def calc_nodata_255_lineage(stacking, band_name, clip_extents, tile_id, rename, workdir):
     """ Band Type 7 NoData 255 and uses LINEAGE """
 
     logger.info('     Start processing for band: %s', band_name)
@@ -545,7 +557,7 @@ def process_bandtype_7(stacking, band_name, clip_extents, tile_id, rename, workd
     return mosaic_filename
 
 
-def process_bandtype_8(stacking, band_name, clip_extents, tile_id, rename, workdir):
+def calc_nodata_9999_lineage(stacking, band_name, clip_extents, tile_id, rename, workdir):
     """ Band Type 8 NoData -9999 and uses LINEAGE """
 
     logger.info('     Start processing for band: %s', band_name)

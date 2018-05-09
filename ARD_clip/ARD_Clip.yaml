@@ -39,21 +39,30 @@ LE07: &l457
     surface_temperature: ST
 
   datatype:
-    # NoData value = -9999
-    1:
+    "[ TYPE: Int16 ][ RANGE: -100,16000 ][ FILL: -9999 ]":
       - toa_band1
       - toa_band2
       - toa_band3
       - toa_band4
       - toa_band5
       - toa_band7
+      - bt_band6
+
+    "[ TYPE: Int16 ][ RANGE: -32767,32767 ][ FILL: -32768 ]":
+      - solar_azimuth_band4
+      - solar_zenith_band4
+      - sensor_azimuth_band4
+      - sensor_zenith_band4
+
+    "[ TYPE: Int16 ][ RANGE: -2000,16000 ][ FILL: -9999 ]":
       - sr_band1
       - sr_band2
       - sr_band3
       - sr_band4
       - sr_band5
       - sr_band7
-      - bt_band6
+
+    "[ TYPE: Int16 ][ RANGE: ??? ][ FILL: -9999 ]":
       - sr_atmos_opacity
       - dswe_diag
       - surface_temperature
@@ -64,29 +73,23 @@ LE07: &l457
       - st_cloud_distance
       - emis
       - st_qa
-    # NoData value = -32768
-    2:
-      - solar_azimuth_band4
-      - solar_zenith_band4
-      - sensor_azimuth_band4
-      - sensor_zenith_band4
-    # NoData value = 255
-    4:
+
+    "[ TYPE: UInt16 ][ RANGE: 0,65535 ][ FILL: 1 ]":
       - radsat_qa
       - pixel_qa
-    # DSWE NoData Convert from 255 to -9999
-    5:
+
+    "[ TYPE: UInt8 ][ RANGE: 0,255 ][ FILL: 255 ]":
       - dswe_intrpd
       - dswe_mask
       - dswe_pshsccss
-    # NoData value uses LINEAGE
-    6:
+
+    "[ TYPE: UInt8 ][ RANGE: 0,255 ][ FILL: NA ][ +LINEAGE ]":
       - sr_cloud_qa
-    # NoData 255 and uses LINEAGE
-    7:
+
+    "[ TYPE: UInt8 ][ RANGE: 0,255 ][ FILL: 255 ][ +LINEAGE ]":
       - hillshade
-    # NoData -9999 and uses LINEAGE
-    8:
+
+    "[ TYPE: Int16 ][ RANGE: ??? ][ FILL: -9999 ][ +LINEAGE ]":
       - emis_stdev
       - percent_slope
 
@@ -157,8 +160,7 @@ LC08:
     surface_temperature: ST
 
   datatype:
-    # NoData value = -9999
-    1:
+    "[ TYPE: Int16 ][ RANGE: -100,16000 ][ FILL: -9999 ]":
       - toa_band1
       - toa_band2
       - toa_band3
@@ -167,6 +169,16 @@ LC08:
       - toa_band6
       - toa_band7
       - toa_band9
+      - bt_band10
+      - bt_band11
+
+    "[ TYPE: Int16 ][ RANGE: -32767,32767 ][ FILL: -32768 ]":
+      - solar_azimuth_band4
+      - solar_zenith_band4
+      - sensor_azimuth_band4
+      - sensor_zenith_band4
+
+    "[ TYPE: Int16 ][ RANGE: -2000,16000 ][ FILL: -9999 ]":
       - sr_band1
       - sr_band2
       - sr_band3
@@ -174,38 +186,34 @@ LC08:
       - sr_band5
       - sr_band6
       - sr_band7
-      - bt_band10
-      - bt_band11
+
+    "[ TYPE: Int16 ][ RANGE: ??? ][ FILL: -9999 ]":
       - dswe_diag
       - surface_temperature
-      - st_downwelled_radiance
+      - st_downwelled_radiance,
       - st_upwelled_radiance
       - st_thermal_radiance
-      - st_atmospheric_transmittance
+      - st_atmospheric_transmittance,
       - st_cloud_distance
       - emis
       - st_qa
-    # NoData value = -32768
-    2:
-      - solar_azimuth_band4
-      - solar_zenith_band4
-      - sensor_azimuth_band4
-      - sensor_zenith_band4
-    # NoData value = 255
-    4:
+
+    "[ TYPE: UInt16 ][ RANGE: 0,65535 ][ FILL: 1 ]":
       - radsat_qa
       - pixel_qa
+
+    "[ TYPE: UInt8 ][ RANGE: 0,255 ][ FILL: 1 ]":
       - sr_aerosol
-    # DSWE NoData Convert from 255 to -9999
-    5:
+
+    "[ TYPE: UInt8 ][ RANGE: 0,255 ][ FILL: 255 ]":
       - dswe_intrpd
       - dswe_mask
       - dswe_pshsccss
-    # NoData 255 and uses LINEAGE
-    7:
+
+    "[ TYPE: UInt8 ][ RANGE: 0,255 ][ FILL: 255 ][ +LINEAGE ]":
       - hillshade
-    # NoData -9999 and uses LINEAGE
-    8:
+
+    "[ TYPE: Int16 ][ RANGE: ??? ][ FILL: -9999 ][ +LINEAGE ]":
       - emis_stdev
       - percent_slope
 
