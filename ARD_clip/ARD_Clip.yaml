@@ -190,10 +190,10 @@ LC08:
     "[ TYPE: Int16 ][ RANGE: ??? ][ FILL: -9999 ]":
       - dswe_diag
       - surface_temperature
-      - st_downwelled_radiance,
+      - st_downwelled_radiance
       - st_upwelled_radiance
       - st_thermal_radiance
-      - st_atmospheric_transmittance,
+      - st_atmospheric_transmittance
       - st_cloud_distance
       - emis
       - st_qa
