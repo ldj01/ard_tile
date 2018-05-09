@@ -213,6 +213,7 @@ def get_tile_scene_intersections(connection, product_id, region, n=2):
     # We need to get 2 consecutive wrsRows north and 2 consecutive wrsRows south
     # of input scene to account for possible 3 scene tile.
     id_info = landsat.match(product_id)
+    logger.info('Select consecutive scenes for %s', product_id)
     ls_prod_id_scenes = db.select_consecutive_scene(connection, n=n, **id_info)
     pathrow_range_list = ['_{0:3s}{1:03d}_'.format(id_info['wrspath'], int(id_info['wrsrow']) + wrs_row_x)
                           for wrs_row_x in range(-n, n+1)]
