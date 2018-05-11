@@ -202,3 +202,5 @@ RUN cd $SRC_DIR \
     && make install \
     && cd $SRC_DIR \
     && rm -rf gdal-1.11.4 gdal-1.11.4.tar.gz
+
+ENV PATH=/usr/local/bin:${PATH}
