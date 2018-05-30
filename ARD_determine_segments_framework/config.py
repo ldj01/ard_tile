@@ -1,4 +1,4 @@
-""" Read configuration from CLI or config file """
+"""Read configuration from CLI or config file."""
 
 import os
 import sys
@@ -7,17 +7,22 @@ import ConfigParser
 from util import logger
 
 
-class objdict(dict):
+class NamedAttrs(dict):
+    """Dictionary which allows setting named attributes on the fly."""
+
     def __getattr__(self, name):
+        """Get attribute values."""
         if name in self:
             return self[name]
         else:
             raise AttributeError("No such attribute: " + name)
 
     def __setattr__(self, name, value):
+        """Set attribute values."""
         self[name] = value
 
     def __delattr__(self, name):
+        """Remove attribute values."""
         if name in self:
             del self[name]
         else:
@@ -25,32 +30,26 @@ class objdict(dict):
 
 
 def read_config(config_file=None, disable_creds=False):
-    """ Read the configuration information """
-
+    """Read the configuration information."""
     config = ConfigParser.ConfigParser()
-    options = objdict()
-
+    options = NamedAttrs()
 
     # Set the configuration values.
     if config_file is None:
         config_file = os.path.expanduser('~/ARD_determine_segments.conf')
 
     # Set the configuration values.
-    #config_file = 'ARD_determine_segments.conf'
     options.config_file = config_file
     options.disable_creds = disable_creds
 
-    if len(config.read(config_file)) == 0:
-        logger.error(("Error opening config file {0}.")
-                        .format(config_file))
+    if not config.read(config_file):
+        logger.error("Error opening config file %s.", config_file)
         sys.exit(1)
 
     section = 'ard'
     if not config.has_section(section):
-        logger.error(("Error: {0} section not in config file.")
-                        .format(section))
+        logger.error("Error: %s section not in config file.", section)
         sys.exit(1)
-
 
     options.l2_db_con = config.get(section, 'dbconnect')
     options.minscenesperseg = config.getint(section, 'minscenespersegment')
@@ -62,8 +61,7 @@ def read_config(config_file=None, disable_creds=False):
     if not disable_creds:
         section = 'mesos'
         if not config.has_section(section):
-            logger.error(("Error: {0} section not in config file.")
-                        .format(section))
+            logger.error("Error: %s section not in config file.", section)
             sys.exit(1)
         options.mesos_principal = config.get(section, 'principal')
         options.mesos_secret = config.get(section, 'secret')
@@ -75,8 +73,7 @@ def read_config(config_file=None, disable_creds=False):
 
     section = 'pgs_framework'
     if not config.has_section(section):
-        logger.error(("Error: {0} section not in config file.")
-                        .format(section))
+        logger.error("Error: %s section not in config file.", section)
         sys.exit(1)
     options.framework_user = config.get(section, 'framework_user')
     options.input_method = config.get(section, 'input_method')
@@ -93,8 +90,7 @@ def read_config(config_file=None, disable_creds=False):
 
     section = 'ardclip'
     if not config.has_section(section):
-        logger.error(("Error: {0} section not in config file.")
-                        .format(section))
+        logger.error("Error: %s section not in config file.", section)
         sys.exit(1)
     options.confdir = config.get(section, 'ard_conf_dir')
     options.indir = config.get(section, 'base_input_dir')
