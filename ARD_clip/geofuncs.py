@@ -1,11 +1,4 @@
-# ==========================================================================
-#
-# ARD HelperFunctions
-#
-#  13 Mar 2017 - Initial Version
-#
-#
-# ==========================================================================
+"""Intersect footprints/grids or parse geospatial datasets."""
 import os
 import sys
 import urllib2
@@ -18,15 +11,8 @@ import landsat
 from util import logger
 
 
-# ----------------------------------------------------------------------------------------------
-#
-#   Purpose:  A file containing a histogram of values in the pixel_qa band has been
-#                     generated.  Open the file and find the count of the specific values for
-#                     each of the various categories.  These counts will be used for calculating
-#                     the % cloud cover, % snow/ice, etc... that will be shown in EarthExplorer.
-#
 def parseHistFile(histFilename):
-
+    """Count histogram for Pixel-QA band for metadata percents."""
     if (not os.path.isfile(histFilename)):
         return ('ERROR - File does not exist',)
     else:
@@ -34,14 +20,14 @@ def parseHistFile(histFilename):
             infile = open(histFilename, 'r')
             histLines = infile.read()
             infile.close()
-        except:
+        except Exception:
             return ('ERROR - Opening or closing hist.json file',)
 
     bucketsLoc = histLines.find('buckets from')
     colonLoc = histLines.find(':', bucketsLoc + 1)
 
-                                                                # Create an array with the number of occurrences
-                                                                # of all 256 values
+    # Create an array with the number of occurrences
+    # of all 256 values
     histArray = []
     headLoc = histLines.find('  ', colonLoc) + 2
     while (len(histArray) <= 255):
@@ -60,12 +46,11 @@ def parseHistFile(histFilename):
     while (binNumber <= 255):
         if (long(histArray[binNumber]) > 0):
 
-            #print 'bin #=' + str(binNumber) + '  histArray[binNumber] = ' + str(histArray[binNumber])
             binStart = binNumber
-                                                                # ignore cloud confidence bit
+            # ignore cloud confidence bit
             if (binStart >= 128):
                 binStart = binStart - 128
-                                                                # ignore cloud confidence bit
+            # ignore cloud confidence bit
             if (binStart >= 64):
                 binStart = binStart - 64
 
@@ -94,16 +79,12 @@ def parseHistFile(histFilename):
 
         binNumber = binNumber + 1
 
-    return (countFill, countClear, countWater, countSnow, countShadow, countCloud)
+    return (countFill, countClear, countWater, countSnow,
+            countShadow, countCloud)
 
 
-# ----------------------------------------------------------------------------------------------
-#
-#   Purpose:  A file containing a histogram of values in the lineage band has been
-#                     generated.  Open the file and find the highest value.
-#
 def parse_gdal_hist_output(gdal_hist_output):
-
+    """Count histogram values from Lineage-QA, for potential all fill"""
     bucket_index = [i for i, line in enumerate(gdal_hist_output)
                     if 'buckets from ' in line].pop()
     histArray = gdal_hist_output[bucket_index + 1].split()
@@ -128,12 +109,9 @@ def parse_gdal_hist_output(gdal_hist_output):
     else:
         return 0, scenePixelCountArray
 
-# ==========================================================================
 
-# ----------------------------------------------------------------------------------------------
-#
-# return counts for each cover type
 def sum_counts(unique_values, count_list, target_bit):
+    """Return counts for each cover type."""
     # determine if each unique value contains target bit
     bit_bool = unique_values & 1 << target_bit > 0
 
@@ -142,11 +120,9 @@ def sum_counts(unique_values, count_list, target_bit):
 
     return final_count
 
-# ----------------------------------------------------------------------------------------------
-#
+
 def raster_value_count(raster_in, tile_id):
-
-
+    """Parse Pixel-QA GTIFF file for metadata percentages."""
     # open raster, read first band as array
     ds = gdal.Open(raster_in)
     band_arr = np.array(ds.GetRasterBand(1).ReadAsArray())
@@ -169,34 +145,42 @@ def raster_value_count(raster_in, tile_id):
         bit_counts['cirrus'] = sum_counts(uni, counts, 9)
         bit_counts['terrain'] = sum_counts(uni, counts, 10)
 
-    logger.debug('        # pixels Fill: %s',        bit_counts.get('fill'))
-    logger.debug('        # pixels Clear: %s',       bit_counts.get('clear'))
-    logger.debug('        # pixels Water: %s',       bit_counts.get('water'))
-    logger.debug('        # pixels Snow: %s',        bit_counts.get('snow_ice'))
-    logger.debug('        # pixels CloudShadow: %s', bit_counts.get('cloud_shadow'))
-    logger.debug('        # pixels CloudCover: %s',  bit_counts.get('cloud_cover'))
-    logger.debug('        # pixels Cirrus: %s',      bit_counts.get('cirrus'))
-    logger.debug('        # pixels Terrain: %s',     bit_counts.get('terrain'))
+    logger.debug('        # pixels Fill: %s',
+                 bit_counts.get('fill'))
+    logger.debug('        # pixels Clear: %s',
+                 bit_counts.get('clear'))
+    logger.debug('        # pixels Water: %s',
+                 bit_counts.get('water'))
+    logger.debug('        # pixels Snow: %s',
+                 bit_counts.get('snow_ice'))
+    logger.debug('        # pixels CloudShadow: %s',
+                 bit_counts.get('cloud_shadow'))
+    logger.debug('        # pixels CloudCover: %s',
+                 bit_counts.get('cloud_cover'))
+    logger.debug('        # pixels Cirrus: %s',
+                 bit_counts.get('cirrus'))
+    logger.debug('        # pixels Terrain: %s',
+                 bit_counts.get('terrain'))
 
     return bit_counts
 
 
-
 def get_tile_scene_intersections(connection, product_id, region, n=2):
-    """ Find the Tile IDs intersecting with product_id, and neighboring same-day consecutive acqs
+    """Intersect Tile IDs with product_id and neighboring same-day acqs.
 
     Args:
         connection (cx_Oracle.Connection): open database connection
         product_id (str): landsat collection product id
-        region (str): tile grid region following shapefile naming convention
+        region (str): tile grid region following shapefile naming
         n (int): consecutive rows to intersect with
 
     Returns:
-        list: all the tile ids that intersect the input landsat product id
-        dict: tile ids that contain all the required path/rows that contribute to that tile
+        list: tile ids that intersect the input landsat product id
+        dict: tile ids which contain required path/rows
 
     Example:
-        >>> get_tile_scene_intersections(db, 'LT04_L2TP_035027_19890712_20161110_01_A1', 'CU', n=2)
+        >>> get_tile_scene_intersections(db,
+        ...     'LT04_L2TP_035027_19890712_20161110_01_A1', 'CU', n=2)
         ([{'H': 11,
            'V': 3,
            'LL_Y': 2714805,
@@ -208,14 +192,16 @@ def get_tile_scene_intersections(connection, product_id, region, n=2):
             'procdate': '20161110',
             'wrspath': '035',
             'wrsrow': '027'}, ...], ...})
-    """
 
-    # We need to get 2 consecutive wrsRows north and 2 consecutive wrsRows south
-    # of input scene to account for possible 3 scene tile.
+    """
+    # We need to get 2 consecutive wrsRows north and 2 consecutive wrsRows
+    # south of input scene to account for possible 3 scene tile.
     id_info = landsat.match(product_id)
     logger.info('Select consecutive scenes for %s', product_id)
-    ls_prod_id_scenes = db.select_consecutive_scene(connection, n=n, **id_info)
-    pathrow_range_list = ['_{0:3s}{1:03d}_'.format(id_info['wrspath'], int(id_info['wrsrow']) + wrs_row_x)
+    ls_prod_id_scenes = db.select_consecutive_scene(connection, n=n,
+                                                    **id_info)
+    pathrow_range_list = ['_{0:3s}{1:03d}_'.format(id_info['wrspath'],
+                          int(id_info['wrsrow']) + wrs_row_x)
                           for wrs_row_x in range(-n, n+1)]
 
     tile_list = []
@@ -225,16 +211,18 @@ def get_tile_scene_intersections(connection, product_id, region, n=2):
         # Get coordinates for input scene and north and south scene.
         results = db.select_corner_polys(connection, ls_prod_id_scenes)
         scene_records = [r for r in results
-                         if any(x in r['LANDSAT_PRODUCT_ID'] for x in pathrow_range_list)]
+                         if any(x in r['LANDSAT_PRODUCT_ID'] for x in
+                                pathrow_range_list)]
         logger.info('Coordinate query response: %s', scene_records)
 
         # Create geometry objects for each scenes coordinates
-        scene_records = {r['LANDSAT_PRODUCT_ID']: ogr.CreateGeometryFromWkt(r['COORDS'])
-                         for r in scene_records}
+        scene_records = {
+            r['LANDSAT_PRODUCT_ID']: ogr.CreateGeometryFromWkt(r['COORDS'])
+            for r in scene_records
+        }
 
         # Find all the tiles that intersect the input scene
         # and put into a list
-
         region_shapefile = read_shapefile(region=region)
 
         layer = region_shapefile.GetLayer()
@@ -275,16 +263,19 @@ def get_tile_scene_intersections(connection, product_id, region, n=2):
 
 
 def read_shapefile(region='', ard_aux_dir=None):
+    """Read region shapefile from ARD_AUX_DIR."""
     if (ard_aux_dir is None) and ('ARD_AUX_DIR' not in os.environ):
         logger.error('ARD_AUX_DIR environment variable not set')
         raise KeyError('ARD_AUX_DIR environment variable not set')
     elif (ard_aux_dir is None):
         ard_aux_dir = os.path.join(os.getenv('ARD_AUX_DIR'), "shapefiles")
 
-    region_shp_filename = os.path.join(ard_aux_dir, region + "_ARD_tiles_geographic.shp")
+    region_shp_filename = os.path.join(ard_aux_dir, region +
+                                       "_ARD_tiles_geographic.shp")
     driver = ogr.GetDriverByName('ESRI Shapefile')
     logger.debug('Open shapefile %s', region_shp_filename)
-    region_shapefile = driver.Open(region_shp_filename, 0) # 0 means read-only. 1 means writeable.
+    read_only = 0
+    region_shapefile = driver.Open(region_shp_filename, read_only)
 
     if region_shapefile is None:
         logger.error('Could not open {0}'.format(region_shp_filename))

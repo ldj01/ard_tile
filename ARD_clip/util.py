@@ -1,4 +1,4 @@
-""" Utilities for interacting with host system """
+"""Utilities for interacting with host system."""
 
 import os
 import sys
@@ -9,52 +9,55 @@ import shutil
 import hashlib
 import logging
 import tarfile
-import datetime
 import subprocess
 
 
-logger = None # global logger instance set by util.setup_logger()
+logger = None  # global logger instance set by util.setup_logger()
 
 
-class L2PGS_LoggingFilter(logging.Filter):
-    """ Set subsystem name via logging filter, for later log parsing """
+class L2pgsLoggingFilter(logging.Filter):
+    """Set subsystem name via logging filter, for later log parsing."""
+
     def filter(self, record):
+        """Set subsystem for log parsing."""
         record.subsystem = 'ARDFramework'
 
         return True
 
 
-class L2PGS_ExceptionFormatter(logging.Formatter):
-    """ Custom Exception formatter """
+class L2pgsExceptionFormatter(logging.Formatter):
+    """Custom Exception formatter."""
+
     def formatException(self, exc_info):
-        result = super(L2PGS_ExceptionFormatter, self).formatException(exc_info)
+        """Initialize exception formatting."""
+        result = super(L2pgsExceptionFormatter, self).formatException(exc_info)
         return repr(result)
 
     def format(self, record):
-        """ Removes all new-lines from an exception traceback """
-        s = super(L2PGS_ExceptionFormatter, self).format(record)
+        """Remove all new-lines from an exception traceback."""
+        msg = super(L2pgsExceptionFormatter, self).format(record)
         if record.exc_text:
-            s = s.replace('\n', ' ')
-            s = s.replace('\\n', ' ')
-        return s
+            msg = msg.replace('\n', ' ')
+            msg = msg.replace('\\n', ' ')
+        return msg
 
 
 def setup_logger(level='INFO', stream='stdout'):
-    """ Initialize the message logging components. """
+    """Initialize the message logging components."""
     global logger
 
     # Setup the logging level
     logging_level = getattr(logging, level.upper())
 
     handler = logging.StreamHandler(getattr(sys, stream.lower()))
-    formatter = L2PGS_ExceptionFormatter(fmt=('%(asctime)s.%(msecs)03d'
-                                              ' %(subsystem)s'
-                                              ' %(levelname)-8s'
-                                              ' %(message)s'),
-                                         datefmt='%Y-%m-%dT%H:%M:%S')
+    formatter = L2pgsExceptionFormatter(fmt=('%(asctime)s.%(msecs)03d'
+                                             ' %(subsystem)s'
+                                             ' %(levelname)-8s'
+                                             ' %(message)s'),
+                                        datefmt='%Y-%m-%dT%H:%M:%S')
 
     handler.setFormatter(formatter)
-    handler.addFilter(L2PGS_LoggingFilter())
+    handler.addFilter(L2pgsLoggingFilter())
 
     logger = logging.getLogger()
     logger.setLevel(logging_level)
@@ -62,16 +65,18 @@ def setup_logger(level='INFO', stream='stdout'):
 
 
 def watch_stdout(cmd):
-    """ Combine stdout/stderr, read output in real time, return execution results
+    """Read combined stdout/stderr in real time and return results.
 
     Args:
         cmd (list): command and arguments to execute
 
     Returns:
         dict: exit status code and text output stream from stdout
+
     """
     logging.debug('Execute: %s', cmd)
-    process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, bufsize=0)
+    process = subprocess.Popen(cmd, stdout=subprocess.PIPE,
+                               stderr=subprocess.STDOUT, bufsize=0)
     output = []
     for line in iter(process.stdout.readline, b''):
         logging.debug(line.strip())
@@ -85,7 +90,7 @@ def watch_stdout(cmd):
 
 
 def execute_cmd(cmd, workdir=None):
-    """ Execute a system command line call, raise error on non-zero exit codes
+    """Execute a system command line call, raise error on non-zero exit
 
     Args:
         cmd (str): The command line to execute.
@@ -93,6 +98,7 @@ def execute_cmd(cmd, workdir=None):
 
     Returns:
         dict: exit status code and text output stream from stdout
+
     """
     current_dir = os.getcwd()
     if os.path.isdir(workdir or ''):
@@ -122,25 +128,26 @@ def execute_cmd(cmd, workdir=None):
 
 
 def make_file_group_writeable(filename):
-    """  Make file group wrietable """
+    """ Make permissions on file group wrietable."""
     st = os.stat(filename)
     os.chmod(filename, st.st_mode | stat.S_IWGRP)
 
 
 def checksum_md5(filename):
-    """ Calculate the MD5 hex digest of input filename
+    """Calculate the MD5 hex digest of input filename.
 
     Args:
         filename (str): path to file to digest
 
     Returns:
         str: md5 checksum
+
     """
     return hashlib.md5(open(filename, 'rb').read()).hexdigest()
 
 
 def process_checksums(indir='.', filext="*.tar", outdir='.'):
-    """ Create md5 checksum files for all matching file types
+    """Create md5 checksum files for all matching file types.
 
     Args:
         indir (str): path to find files
@@ -149,6 +156,7 @@ def process_checksums(indir='.', filext="*.tar", outdir='.'):
 
     Returns:
         str: status of operation [SUCCESS, ERROR]
+
     """
     fullnames = glob.glob(os.path.join(indir, filext))
     for fullname in fullnames:
@@ -161,15 +169,16 @@ def process_checksums(indir='.', filext="*.tar", outdir='.'):
 
 
 def tar_archive(output_filename, files):
-    """ Combine files as single-layer tar archive
+    """Combine files as single-layer tar archive.
 
     Args:
         output_filename (str): path to write tar archive
         files (list): full paths to files to add to archive
-    """
 
-    if len(files) < 1:
-        raise ValueError("No files to archive, cannot create %s" % output_filename)
+    """
+    if not files:
+        raise ValueError("No files to archive, cannot create %s" %
+                         output_filename)
 
     with tarfile.open(output_filename, "w") as tar:
         for filename in files:
@@ -179,7 +188,7 @@ def tar_archive(output_filename, files):
 
 
 def untar_archive(filename, directory='.'):
-    """ Extracts a tar.gz file into directory location, using basename as new folder name
+    """Extract into directory using basename as new folder name.
 
     Args:
         filename (str): path to tar.gz archive
@@ -187,6 +196,7 @@ def untar_archive(filename, directory='.'):
 
     Returns:
         str: path to new created directory
+
     """
     if make_dirs(directory):
         logger.info('Unpacking tar: %s', filename)
@@ -198,7 +208,7 @@ def untar_archive(filename, directory='.'):
 
 
 def make_dirs(directory):
-    """ Create a directory if it does not already exist """
+    """Create a directory if it does not already exist."""
     if not os.path.isdir(directory):
         logger.info('Create new directory: %s', directory)
         os.makedirs(directory)
@@ -209,7 +219,7 @@ def make_dirs(directory):
 
 
 def ffind(*paths):
-    """ Find files by combining globs and returning the first result
+    """Find first file match by combining glob searches.
 
     Args:
         paths (list): list of filepath parts to combine as a glob
@@ -220,6 +230,7 @@ def ffind(*paths):
     Example:
         >>> ffind('/usr', 'bin', '*sh')
         '/usr/bin/bash'
+
     """
     search = os.path.join(*paths)
     logger.debug('Find files: %s', search)
@@ -227,7 +238,7 @@ def ffind(*paths):
 
 
 def remove(*paths):
-    """ Remove mutiple paths, either files or directories
+    """Remove mutiple paths, either files or directories.
 
     Args:
         paths (list): the paths to attempt to remove
@@ -238,6 +249,7 @@ def remove(*paths):
     Examples:
         >>> remove('local.txt', '/path/to/folder', '/other/folder')
         None
+
     """
     for path in paths:
         logger.debug('Remove %s', path)
