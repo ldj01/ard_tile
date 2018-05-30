@@ -5,7 +5,7 @@ from argparse import ArgumentParser
 
 import config
 from util import setup_logger, logger
-from ARD_Clip_L8 import process_segments
+from ARD_Clip import process_segments
 
 
 def parse_cli():
