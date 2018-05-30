@@ -328,8 +328,7 @@ def run_forever(conf):
     logger.debug('Segment query: {0}'.format(conf.segment_query))
 
     global shutdown
-    connection = db.connection(conf.l2_db_con)
-    db.reset_records(connection)
+    db.reset_records(db.connect(conf.l2_db_con))
 
     # Establish framework, executor, and authentication credentials information.
     framework = mesos_pb2.FrameworkInfo()
@@ -382,7 +381,7 @@ def run_forever(conf):
             break
 
         # If the job queue is empty, get work.
-        if (not mesosScheduler.jobs and queue_segments(mesosScheduler.jobs, conf, connection) == ERROR):
+        if (not mesosScheduler.jobs and queue_segments(mesosScheduler.jobs, conf, db.connect(conf.l2_db_con)) == ERROR):
             driver.stop(True)
             sys.exit(1)
 
@@ -396,7 +395,7 @@ def run_forever(conf):
                    mesosScheduler.tasksFinished == conf.max_jobs):
                 time.sleep(20)
             while not mesosScheduler.jobs:
-                if queue_segments(mesosScheduler.jobs, conf, connection) == ERROR:
+                if queue_segments(mesosScheduler.jobs, conf, db.connect(conf.l2_db_con)) == ERROR:
                     driver.stop(True)
                     sys.exit(1)
                 time.sleep(20)

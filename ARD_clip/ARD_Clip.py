@@ -29,7 +29,7 @@ def process_tile(current_tile, segment, region, tiles_contrib_scenes, output_pat
     logger.debug("clip_extents: %s", clip_extents)
 
     # See if tile_id exists in ARD_COMPLETED_TILES table
-    tile_rec = db.check_tile_status(db.connection(conf.connstr), tile_id)
+    tile_rec = db.check_tile_status(db.connect(conf.connstr), tile_id)
     logger.debug("Tile status: %s", tile_rec)
 
     if len(tile_rec) != 0:
@@ -56,7 +56,7 @@ def process_tile(current_tile, segment, region, tiles_contrib_scenes, output_pat
             contributing_scenes.update(provided_contrib_rec)
 
         if len(provided_contrib_rec) == 0:
-            db_contrib_rec = db.fetch_file_loc(db.connection(conf.connstr),
+            db_contrib_rec = db.fetch_file_loc(db.connect(conf.connstr),
                                                sat=segment['SATELLITE'],
                                                wildcard=wildcard)
             logger.debug('Fetch file locations from DB: %s', db_contrib_rec)
@@ -161,7 +161,7 @@ def process_tile(current_tile, segment, region, tiles_contrib_scenes, output_pat
 
         # No errors making this tile, record it in our database
         completed_tile_list = [[tile_id,",".join(contributing_scenes.keys()), is_complete_tile, "SUCCESS"]]
-        db.insert_tile_record(db.connection(conf.connstr), completed_tile_list)
+        db.insert_tile_record(db.connect(conf.connstr), completed_tile_list)
     return "SUCCESS"
 
 
@@ -571,7 +571,7 @@ def process_segment(segment, output_path, conf):
 
     scene_state = "INWORK"
     # update PROCESSING_STATE in ARD_PROCESSED_SCENES to 'INWORK'
-    db.update_scene_state(db.connection(conf.connstr), segment['LANDSAT_PRODUCT_ID'], scene_state)
+    db.update_scene_state(db.connect(conf.connstr), segment['LANDSAT_PRODUCT_ID'], scene_state)
 
     logger.info("Scene %s is %s.", segment['LANDSAT_PRODUCT_ID'], scene_state)
     id_parts = landsat.match_dt(segment['LANDSAT_PRODUCT_ID'])
@@ -581,12 +581,12 @@ def process_segment(segment, output_path, conf):
         region = pathrow2regionLU[pathrow]
     else:
         scene_state = "NOGRID"
-        db.update_scene_state(db.connection(conf.connstr), segment['LANDSAT_PRODUCT_ID'], scene_state)
+        db.update_scene_state(db.connect(conf.connstr), segment['LANDSAT_PRODUCT_ID'], scene_state)
         return scene_state
 
     # Intersect scene with tile index to determine which tiles must be produced
     # Get tiles for scene and for each tile a list of path/rows from consecutive scenes
-    hv_tiles, tile_scenes = geofuncs.get_tile_scene_intersections(db.connection(conf.connstr),
+    hv_tiles, tile_scenes = geofuncs.get_tile_scene_intersections(db.connect(conf.connstr),
                                                                   segment['LANDSAT_PRODUCT_ID'],
                                                                   region)
 
@@ -596,7 +596,7 @@ def process_segment(segment, output_path, conf):
 
         scene_state = "ERROR"
         # update PROCESSING_STATE in ARD_PROCESSED_SCENES
-        db.update_scene_state(db.connection(conf.connstr), segment['LANDSAT_PRODUCT_ID'], scene_state)
+        db.update_scene_state(db.connect(conf.connstr), segment['LANDSAT_PRODUCT_ID'], scene_state)
         return scene_state
 
     for current_tile in hv_tiles:
@@ -615,12 +615,12 @@ def process_segment(segment, output_path, conf):
         if tile_state in ('ERROR', 'NOT NEEDED'):
             scene_state = tile_state
             # update PROCESSING_STATE in ARD_PROCESSED_SCENES
-            db.update_scene_state(db.connection(conf.connstr), segment['LANDSAT_PRODUCT_ID'], scene_state)
+            db.update_scene_state(db.connect(conf.connstr), segment['LANDSAT_PRODUCT_ID'], scene_state)
             return scene_state
 
     scene_state = "COMPLETE"
     # update PROCESSING_STATE in ARD_PROCESSED_SCENES
-    db.update_scene_state(db.connection(conf.connstr), segment['LANDSAT_PRODUCT_ID'], scene_state)
+    db.update_scene_state(db.connect(conf.connstr), segment['LANDSAT_PRODUCT_ID'], scene_state)
 
     return scene_state
 

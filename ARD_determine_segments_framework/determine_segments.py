@@ -93,7 +93,7 @@ def filter_dups(records):
 
 def determine_segments(l2_db_con='', segment_query='', indir='', outdir='', force_input_dir=None, **kwargs):
 
-    scenes_to_process = db.select(db.connection(l2_db_con), segment_query)
+    scenes_to_process = db.select(db.connect(l2_db_con), segment_query)
 
     logger.info("Number of scenes returned from query: {0}".format(len(scenes_to_process)))
     logger.debug("Complete scene list: {0}".format(scenes_to_process))
@@ -108,7 +108,7 @@ def determine_segments(l2_db_con='', segment_query='', indir='', outdir='', forc
     segments = map(fmt_segment, scenes_to_process)
     dup_scenes, segments = filter_dups(segments)
 
-    db.duplicate_scenes_insert(db.connection(l2_db_con), dup_scenes)
+    db.duplicate_scenes_insert(db.connect(l2_db_con), dup_scenes)
 
     segments = segments_group_list(segments)
     segments.sort(reverse=True, key=len)

@@ -5,7 +5,7 @@ import cx_Oracle
 from util import logger
 
 
-def connection(connstr):
+def connect(connstr):
     """ Open a new Oracle DB connection
 
     Args:
