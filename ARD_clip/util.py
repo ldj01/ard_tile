@@ -12,7 +12,7 @@ import tarfile
 import subprocess
 
 
-logger = None  # global logger instance set by util.setup_logger()
+logger = logging.getLogger('ARD_clip')
 
 
 class L2pgsLoggingFilter(logging.Filter):
@@ -59,7 +59,6 @@ def setup_logger(level='INFO', stream='stdout'):
     handler.setFormatter(formatter)
     handler.addFilter(L2pgsLoggingFilter())
 
-    logger = logging.getLogger()
     logger.setLevel(logging_level)
     logger.addHandler(handler)
 
