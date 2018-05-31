@@ -41,10 +41,8 @@ class ArdTileScheduler(mesos.interface.Scheduler):
 
     def scheduling_allowed(self):
         """Check if it is OK to schedule more jobs."""
-        allowed = ((self.n_tasks_launched - self.n_tasks_finished)
-                   < self.ard_config.max_jobs)
-        logger.debug('Scheduling allowed: %s', allowed)
-        return allowed
+        return ((self.n_tasks_launched - self.n_tasks_finished)
+                < self.ard_config.max_jobs)
 
     def resourceOffers(self, driver, offers):
         """Event trigger when new resources available to framework."""

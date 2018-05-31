@@ -11,9 +11,9 @@ from ARD_Clip import process_segments
 def parse_cli():
     """Parse supplied command line arguments."""
     parser = ArgumentParser()
-    parser.add_argument(action="store", dest='segment', required=True,
+    parser.add_argument(action="store", dest='segment',
                         type=json.loads, metavar='JSON')
-    parser.add_argument(action="store", dest='output_path', required=True,
+    parser.add_argument(action="store", dest='output_path',
                         type=str, metavar='PATH')
     parser.add_argument('-c', '--config', action="store", dest='config_file',
                         required=False, type=str, metavar='PATH')
