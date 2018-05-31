@@ -327,19 +327,20 @@ def queue_segments(jobs, conf, connection):
                 )
 
                 # Build the Docker entrypoint command.
-                cmd = [
-                    'cli.py', '"' +
+                cmd = ' '.join([
+                    'cli.py', "'" +
                     json.dumps(segment, sort_keys=True, default=str) +
-                    '"', final_output
-                ]
-                job_id = format_job_id(segment)
+                    "'", final_output
+                ])
+                job_id = format_job_id(cmd)
+                logger.debug('Command to clip: [%s]', cmd)
 
                 # Compile the job information.
                 job = Job()
                 job.cpus = conf.cpus
                 job.disk = conf.disk
                 job.mem = conf.memory
-                job.command = ' '.join(cmd)
+                job.command = cmd
                 job.job_id = job_id
                 jobs.append(job)
                 logger.info('Queuing job id: %s', job_id)
