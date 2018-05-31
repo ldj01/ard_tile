@@ -201,6 +201,12 @@ class Job(object):
         aux_volume.container_path = conf.auxdir
         aux_volume.mode = 2  # mesos_pb2.Volume.Mode.RO
 
+        configuration_volume = container.volumes.add()
+        configuration_volume.host_path = os.path.basename(conf.confloc)
+        configuration_volume.container_path = (
+            os.path.expanduser('~/ARD_Clip.conf'))
+        configuration_volume.mode = 2  # mesos_pb2.Volume.Mode.RO
+
         # Specify container Docker image
         docker = mesos_pb2.ContainerInfo.DockerInfo()
         docker.image = conf.container_name
@@ -237,8 +243,6 @@ class Job(object):
         # Add the docker uri for logging into the remote repository
         if conf.docker_pkg:
             command.uris.add().value = conf.docker_pkg
-
-        command.uris.add().value = conf.confdir
 
         # The MergeFrom allows to create an object then to use this object
         # in an other one. Here we use the new CommandInfo object and specify

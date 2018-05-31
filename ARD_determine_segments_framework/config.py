@@ -94,7 +94,7 @@ def read_config(config_file=None, disable_creds=False):
     if not config.has_section(section):
         logger.error("Error: %s section not in config file.", section)
         sys.exit(1)
-    options.confdir = config.get(section, 'ard_conf_dir')
+    options.confloc = config.get(section, 'ard_conf_loc')
     options.indir = config.get(section, 'base_input_dir')
     options.outdir = config.get(section, 'base_output_dir')
     options.auxdir = config.get(section, 'base_aux_dir')
