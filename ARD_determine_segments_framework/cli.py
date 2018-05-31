@@ -26,7 +26,6 @@ def parse_cli():
 
 
 if __name__ == '__main__':
-    setup_logger()
-    framework.run_forever(
-        config.read_config(
-            **parse_cli()))
+    opts = config.read_config(**parse_cli())
+    setup_logger('debug' if opts.debug else 'info')
+    framework.run_forever(opts)

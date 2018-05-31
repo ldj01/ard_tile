@@ -57,6 +57,8 @@ def read_config(config_file=None, disable_creds=False):
     options.docker_pkg = config.get(section, 'docker_pkg')
     options.segment_query = config.get(section, 'segment_query')
     options.satellite = config.get(section, 'satellite')
+    if config.has_option(section, 'debug'):
+        options.debug = config.getboolean(section, 'debug')
 
     if not disable_creds:
         section = 'mesos'

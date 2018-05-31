@@ -41,8 +41,10 @@ class ArdTileScheduler(mesos.interface.Scheduler):
 
     def scheduling_allowed(self):
         """Check if it is OK to schedule more jobs."""
-        return ((self.n_tasks_launched - self.n_tasks_finished)
-                < self.ard_config.max_jobs)
+        allowed = ((self.n_tasks_launched - self.n_tasks_finished)
+                   < self.ard_config.max_jobs)
+        logger.debug('Scheduling allowed: %s', allowed)
+        return allowed
 
     def resourceOffers(self, driver, offers):
         """Event trigger when new resources available to framework."""
@@ -62,6 +64,7 @@ class ArdTileScheduler(mesos.interface.Scheduler):
         # there's nothing more to do.
         if shutdown.flag or not self.jobs:
             for offer in offers:
+                logger.debug('Decline offers: %s', offer.id)
                 driver.declineOffer(offer.id)
             return
 
@@ -69,6 +72,7 @@ class ArdTileScheduler(mesos.interface.Scheduler):
             if (not self.jobs
                     or not self.scheduling_allowed()
                     or shutdown.flag):
+                logger.debug('Decline offers: %s', offer.id)
                 driver.declineOffer(offer.id)
                 continue
             avail_cpus = 0
@@ -107,11 +111,14 @@ class ArdTileScheduler(mesos.interface.Scheduler):
                 avail_cpus -= job.cpus
                 avail_disk -= job.disk
                 avail_mem -= job.mem
+                logger.debug('Using [%d]C [%d]M [%d]D from offer %s',
+                             job.cpus, job.mem, job.disk, offer.id)
 
             if tasks:
+                logger.debug('Launching %d tasks', len(tasks))
                 driver.launchTasks(offer.id, tasks)
-
             else:
+                logger.debug('Decline offers: %s', offer.id)
                 driver.declineOffer(offer.id)
 
     def statusUpdate(self, driver, update):
@@ -327,6 +334,7 @@ def queue_segments(jobs, conf, connection):
                     json.dumps(segment, sort_keys=True, default=str) +
                     '"', final_output
                 ]
+                job_id = format_job_id(segment)
 
                 # Compile the job information.
                 job = Job()
@@ -334,8 +342,9 @@ def queue_segments(jobs, conf, connection):
                 job.disk = conf.disk
                 job.mem = conf.memory
                 job.command = ' '.join(cmd)
-                job.job_id = format_job_id(segment)
+                job.job_id = job_id
                 jobs.append(job)
+                logger.info('Queuing job id: %s', job_id)
 
         if not has_enough_segs:
             logger.info("No segments meet the %d scenes per segment minimum",
@@ -404,8 +413,10 @@ def run_forever(conf):
         # If a shutdown has been requested, suppress offers and wait for the
         # framework thread to complete.
         if shutdown.flag:
+            logger.info("Shutdown requested....")
             driver.suppressOffers()
             while framework_thread.is_alive():
+                logger.debug("Thread alive, sleep 5....")
                 time.sleep(5)
             break
 
@@ -419,8 +430,10 @@ def run_forever(conf):
         # If there's no new work to be done or the max number of jobs are
         # already running, suppress offers and wait for some jobs to finish.
         if (not scheduler.jobs or not scheduler.scheduling_allowed()):
+            logger.info("No jobs or scheduling not allowed....")
             driver.suppressOffers()
             while not scheduler.scheduling_allowed():
+                logger.debug("Scheduling not alive, sleep 20....")
                 time.sleep(20)
             while not scheduler.jobs:
                 if queue_segments(scheduler.jobs, conf,
