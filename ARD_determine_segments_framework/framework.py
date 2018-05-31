@@ -278,8 +278,8 @@ def format_job_id(segment):
     """Generate unique Mesos Task Job IDs."""
     # job_id format: <sat>_<path>_<lowest_wrs_row>_<highest_wrs_row>_<acq_date>
     # example:        LE07-047-027-030-2016-09-28
-    return ("{SATELLITE}-{WRS_PATH:03s}-{WRS_ROW:03s}-"
-            "{WRS_ROW_H:03s}-{DATE_ACQUIRED:%Y-%m-%d}"
+    return ("{SATELLITE}-{WRS_PATH:0>3s}-{WRS_ROW:0>3s}-"
+            "{WRS_ROW_H:0>3s}-{DATE_ACQUIRED:%Y-%m-%d}"
             .format(WRS_ROW_H=segment[-1]['WRS_ROW'],
                     **segment[0]))
 
