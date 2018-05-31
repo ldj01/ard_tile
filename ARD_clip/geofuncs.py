@@ -98,16 +98,7 @@ def parse_gdal_hist_output(gdal_hist_output):
     scenePixelCountArray.append(count2)
     scenePixelCountArray.append(count3)
 
-    if (count1 > 0 and count2 > 0 and count3 > 0):
-        return 3, scenePixelCountArray
-    elif ((count1 > 0 and count2 > 0) or
-          (count1 > 0 and count3 > 0) or
-          (count2 > 0 and count3 > 0)):
-        return 2, scenePixelCountArray
-    elif (count1 > 0 or count2 > 0 or count3 > 0):
-        return 1, scenePixelCountArray
-    else:
-        return 0, scenePixelCountArray
+    return (count1 > 0) + (count2 > 0) + (count3 > 0), scenePixelCountArray
 
 
 def sum_counts(unique_values, count_list, target_bit):
