@@ -310,10 +310,10 @@ def queue_segments(jobs, conf, connection):
 
                 # WARNING: This assumes subdirectories are desired
                 subdirdest = {
-                    '4': 'tm',
-                    '5': 'tm',
-                    '7': 'etm',
-                    '8': 'oli_tirs'
+                    'LT04': 'tm',
+                    'LT05': 'tm',
+                    'LE07': 'etm',
+                    'LC08': 'oli_tirs'
                 }
                 final_output = (
                     os.path.join(conf.outdir, "lta_incoming",
