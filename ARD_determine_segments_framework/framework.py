@@ -308,13 +308,23 @@ def queue_segments(jobs, conf, connection):
                             " %s", completed_scene_list)
                 db.processed_scenes(connection, completed_scene_list)
 
-                # Build the Docker entrypoint command.
-                cmd = ['ARD_Clip'] ###########################################         TODO: : : 
+                # WARNING: This assumes subdirectories are desired
+                subdirdest = {
+                    '4': 'tm',
+                    '5': 'tm',
+                    '7': 'etm',
+                    '8': 'oli_tirs'
+                }
+                final_output = (
+                    os.path.join(conf.outdir, "lta_incoming",
+                                 subdirdest[segment[0]['SATELLITE']],
+                                 'ARD_Tile')
+                )
 
-                subdirdest = {'4': 'tm', '5': 'tm', '7': 'etm', '8': 'oli_tirs'}
-                final_output = os.path.join(conf.outdir, "lta_incoming",
-                                            subdirdest[segment[0]['SATELITE']], 'ARD_Tile')
-                cmd.extend(['"' + json.dumps(segment) + '"', final_output ])
+                # Build the Docker entrypoint command.
+                cmd = [
+                    'cli.py', '"' + json.dumps(segment) + '"', final_output
+                ]
 
                 # Compile the job information.
                 job = Job()
