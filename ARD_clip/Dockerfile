@@ -1,19 +1,14 @@
-FROM geos-ard-external
+FROM losrlcmp02.cr.usgs.gov:5000/geos-ard-external as ard-clip
 
-MAINTAINER USGS EROS SDW http://eros.usgs.gov
-LABEL description="Create Tiles from Scene(s)"
+LABEL description="Create Tiles from Scene(s)" \
+      maintainer="USGS EROS SDW http://eros.usgs.gov"
 
 ENV ARD_SCHEMA=/usr/local/usgs/ard_tile/auxiliaries/ard_metadata_v1_1.xsd \
     ARD_AUX_DIR=/usr/local/usgs/ard_tile/auxiliaries
 
 RUN pip install --upgrade PyYAML git+https://github.com/USGS-EROS/espa-python-library.git@v1.1.0#espa
 
-COPY ARD_Clip_L457.py /usr/local/bin/
-COPY ARD_Clip_L8.py /usr/local/bin/
-COPY ARD_regionLU.py /usr/local/bin/
-COPY ARD_HelperFunctions.py /usr/local/bin/
-COPY ARD_metadata.py /usr/local/bin/
-
+COPY ./* /usr/local/bin/
 WORKDIR /home/tilest
 
-#ENTRYPOINT ["ARD_Clip.py"]
+ENTRYPOINT ["cli.py"]

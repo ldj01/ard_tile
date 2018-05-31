@@ -1,10 +1,7 @@
-FROM losrlcmp02.cr.usgs.gov:5000/ora_inst:latest
+FROM losrlcmp02.cr.usgs.gov:5000/ora_inst:latest as geos-ard-external
 
-
-MAINTAINER USGS EROS LSRD http://eros.usgs.gov
-
-
-LABEL description="External software we use installed into the image as well as additional CENTOS repo packages required for building and executing ESPA-Product-Fulfillment."
+LABEL description="External GIS software" \
+      maintainer="USGS EROS LSRD http://eros.usgs.gov"
 
 
 # Compilers and all the rquired libraries
@@ -29,6 +26,18 @@ RUN yum group install -y "Development Tools" \
     && yum clean metadata
 
 
+# Versions and checksums
+ENV LIBXML2_VERSION=2.9.3 \
+	LIBXML2_SHA256=4de9e31f46b44d34871c22f54bfc54398ef124d6f7cafb1f4a5958fbcd3ba12d  \
+    LIBXSLT_VERSION=1.1.28 \
+	LIBXSLT_SHA256=5fc7151a57b89c03d7b825df5a0fae0a8d5f05674c0e7cf2937ecec4d54a028c  \
+    PROJ4_VERSION=4.9.1 \
+	PROJ4_SHA256=fca0388f3f8bc5a1a803d2f6ff30017532367992b30cf144f2d39be88f36c319  \
+    GEOS_VERSION=3.6.1 \
+    GEOS_SHA256=4a2e4e3a7a09a7cfda3211d0f4a235d9fd3176ddf64bd8db14b4ead266189fc5  \
+    GDAL_VERSION=1.11.4 \
+    GDAL_SHA256=f60e736db626b9d7ca3549bdd53d1699950af488ed4190b4ddb54c71d22411be  \
+    PYTHON_NUMPY_VERSION=1.11.0
 
 # Source and installation locations
 ENV PREFIX=/usr/local \
@@ -112,50 +121,52 @@ ENV ZLIBINC=$ZLIB_PREFIX/include \
 # May also solve some hdfeos issues
 ENV LD_LIBRARY_PATH=/usr/local/lib
 
+
 # Install libxml2
-COPY external_tools/libxml2-2.9.3.tar.gz $SRC_DIR
-RUN cd $SRC_DIR \
-    && tar -xvf libxml2-2.9.3.tar.gz \
-    && cd libxml2-2.9.3 \
-    && ./configure --prefix=$XML2_PREFIX \
-        --with-zlib=$ZLIB_PREFIX \
-        --with-lzma=$XZ_PREFIX \
+RUN wget -nv ftp://xmlsoft.org/libxml2/libxml2-${LIBXML2_VERSION}.tar.gz \
+    && sha256sum libxml2-${LIBXML2_VERSION}.tar.gz | grep -E "^${LIBXML2_SHA256}" \
+    && { tar -xf libxml2-${LIBXML2_VERSION}.tar.gz \
+    && cd libxml2-${LIBXML2_VERSION} \
+    && ./configure --prefix=${XML2_PREFIX} \
+        --with-zlib=${ZLIB_PREFIX} \
+        --with-lzma=${XZ_PREFIX} \
         --with-python \
         --enable-shared \
         --enable-static \
-    && make \
-    && make install \
-    && cd $SRC_DIR \
-    && rm -rf libxml2-2.9.3 libxml2-2.9.3.tar.gz
+    && make -j4  \
+    && make install; } &>/dev/null \
+    && cd ${SRC_DIR} \
+    && rm -rf *
 
 
 # Install libxslt
-COPY external_tools/libxslt-1.1.28.tar.gz $SRC_DIR
-RUN cd $SRC_DIR \
-    && tar -xvf libxslt-1.1.28.tar.gz \
-    && cd libxslt-1.1.28 \
-    && ./configure --prefix=$XSLT_PREFIX \
-        --with-libxml-libs-prefix=$XML2LIB \
+RUN wget -nv ftp://xmlsoft.org/libxslt/libxslt-${LIBXSLT_VERSION}.tar.gz \
+    && sha256sum libxslt-${LIBXSLT_VERSION}.tar.gz | grep -E "^${LIBXSLT_SHA256}" \
+    && { tar -xf libxslt-${LIBXSLT_VERSION}.tar.gz \
+    && cd libxslt-${LIBXSLT_VERSION} \
+    && ./configure --prefix=${XSLT_PREFIX} \
+        --with-libxml-libs-prefix=${XML2LIB} \
         --with-python \
         --enable-shared \
         --enable-static \
-    && make \
-    && make install \
-    && cd $SRC_DIR \
-    && rm -rf libxslt-1.1.28 libxslt-1.1.28.tar.gz
+    && make -j4 \
+    && make install; } &>/dev/null \
+    && cd ${SRC_DIR} \
+    && rm -rf *
+
 
 # Install proj4
-COPY external_tools/proj-4.9.1.tar.gz $SRC_DIR
-RUN cd $SRC_DIR \
-    && tar -xvf proj-4.9.1.tar.gz \
-    && cd proj-4.9.1 \
-    && ./configure --prefix=$PROJ4_PREFIX \
+RUN wget -nv http://download.osgeo.org/proj/proj-${PROJ4_VERSION}.tar.gz \
+    && sha256sum proj-${PROJ4_VERSION}.tar.gz | grep -E "^${PROJ4_SHA256}" \
+    && { tar -xf proj-${PROJ4_VERSION}.tar.gz \
+    && cd proj-${PROJ4_VERSION} \
+    && ./configure --prefix=${PROJ4_PREFIX} \
         --enable-shared \
         --enable-static \
-    && make \
-    && make install \
-    && cd $SRC_DIR \
-    && rm -rf proj-4.9.1 proj-4.9.1.tar.gz
+    && make -j4 \
+    && make install; } &>/dev/null \
+    && cd ${SRC_DIR} \
+    && rm -rf *
 
 
 # Python environment setup
@@ -170,37 +181,37 @@ RUN pip install --upgrade pip \
         python-dateutil==2.5.3 \
         requests==2.10.0 \
         lxml==3.6.0 \
-        numpy==1.11.0
+        numpy==${PYTHON_NUMPY_VERSION}
 
 
 # Install GEOS
-COPY external_tools/geos-3.6.1.tar $SRC_DIR
-RUN cd $SRC_DIR \
-    && tar -xvf geos-3.6.1.tar \
-    && cd geos-3.6.1 \
-    && ./configure --prefix=$GEOS_PREFIX \
+RUN wget -nv http://download.osgeo.org/geos/geos-${GEOS_VERSION}.tar.bz2 \
+    && sha256sum geos-${GEOS_VERSION}.tar.bz2 | grep -E "^${GEOS_SHA256}" \
+    && { tar -xjf geos-${GEOS_VERSION}.tar.bz2 \
+    && cd geos-${GEOS_VERSION} \
+    && ./configure --prefix=${GEOS_PREFIX} \
         --enable-shared \
         --enable-static \
-    && make \
-    && make install \
-    && cd $SRC_DIR \
-    && rm -rf geos-3.6.1 geos-3.6.1.tar
+    && make -j4 \
+    && make install; } &>/dev/null \
+    && cd ${SRC_DIR} \
+    && rm -rf *
+
 
 # Install GDAL
-COPY external_tools/gdal-1.11.4.tar.gz $SRC_DIR
-RUN cd $SRC_DIR \
-    && tar -xvf gdal-1.11.4.tar.gz \
-    && cd gdal-1.11.4 \
-    && ./configure --prefix=$GDAL_PREFIX \
+RUN wget -nv http://download.osgeo.org/gdal/${GDAL_VERSION}/gdal-${GDAL_VERSION}.tar.gz \
+    && sha256sum gdal-${GDAL_VERSION}.tar.gz | grep -E "^${GDAL_SHA256}" \
+    && { tar -xf gdal-${GDAL_VERSION}.tar.gz \
+    && cd gdal-${GDAL_VERSION} \
+    && ./configure --prefix=${GDAL_PREFIX} \
         --with-liblzma \
         --with-python=yes \
-        --with-geos=yes \
-        --with-static-proj4=$PROJ4_LIB \
+        --with-static-proj4=${PROJ4_LIB} \
         --enable-shared \
         --enable-static \
-    && make \
-    && make install \
-    && cd $SRC_DIR \
-    && rm -rf gdal-1.11.4 gdal-1.11.4.tar.gz
+    && make -j4 \
+    && make install; } &>/dev/null \
+    && cd ${SRC_DIR} \
+    && rm -rf *
 
 ENV PATH=/usr/local/bin:${PATH}

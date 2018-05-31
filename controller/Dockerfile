@@ -1,4 +1,4 @@
-FROM losrlcmp02.cr.usgs.gov:5000/ora_inst:latest
+FROM losrlcmp02.cr.usgs.gov:5000/ora_inst:latest as ard-controller
 MAINTAINER USGS EROS L2PGS http://eros.usgs.gov
 LABEL description="ARD tile framework controller"
 
