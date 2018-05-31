@@ -332,7 +332,7 @@ def queue_segments(jobs, conf, connection):
                     json.dumps(segment, sort_keys=True, default=str) +
                     "'", final_output
                 ])
-                job_id = format_job_id(cmd)
+                job_id = format_job_id(segment)
                 logger.debug('Command to clip: [%s]', cmd)
 
                 # Compile the job information.
