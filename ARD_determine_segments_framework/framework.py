@@ -102,7 +102,7 @@ class ArdTileScheduler(mesos.interface.Scheduler):
                    avail_disk >= self.jobs[0].disk and
                    avail_mem >= self.jobs[0].mem):
                 job = self.jobs.pop(0)
-                tasks.append(job.task_format(offer))
+                tasks.append(job.task_format(offer, self.ard_config))
                 jobids.append("'{0}'".format(job.job_id))
                 job.submitted = True
                 self.logdirs[job.job_id] = job.logdir
