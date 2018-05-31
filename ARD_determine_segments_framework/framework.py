@@ -202,7 +202,7 @@ class Job(object):
         aux_volume.mode = 2  # mesos_pb2.Volume.Mode.RO
 
         configuration_volume = container.volumes.add()
-        configuration_volume.host_path = os.path.basename(conf.confloc)
+        configuration_volume.host_path = conf.confloc
         configuration_volume.container_path = (
             os.path.expanduser('~/ARD_Clip.conf'))
         configuration_volume.mode = 2  # mesos_pb2.Volume.Mode.RO
