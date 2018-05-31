@@ -323,7 +323,9 @@ def queue_segments(jobs, conf, connection):
 
                 # Build the Docker entrypoint command.
                 cmd = [
-                    'cli.py', '"' + json.dumps(segment) + '"', final_output
+                    'cli.py', '"' +
+                    json.dumps(segment, sort_keys=True, default=str) +
+                    '"', final_output
                 ]
 
                 # Compile the job information.
