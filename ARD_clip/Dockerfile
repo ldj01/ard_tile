@@ -4,7 +4,8 @@ LABEL description="Create Tiles from Scene(s)" \
       maintainer="USGS EROS SDW http://eros.usgs.gov"
 
 ENV ARD_SCHEMA=/usr/local/usgs/ard_tile/auxiliaries/ard_metadata_v1_1.xsd \
-    ARD_AUX_DIR=/usr/local/usgs/ard_tile/auxiliaries
+    ARD_AUX_DIR=/usr/local/usgs/ard_tile/auxiliaries \
+    ARD_YAML_PATH=/usr/local/bin/ARD_Clip.yaml
 
 RUN pip install --upgrade PyYAML git+https://github.com/USGS-EROS/espa-python-library.git@v1.1.0#espa
 
