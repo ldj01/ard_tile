@@ -579,6 +579,9 @@ def process_output(products, producers, outputs, tile_id, output_path):
                     if any([r in o for r in required]) and isinstance(o, str)]
         included.append(outputs['XML'][product_request])
         util.tar_archive(output_archive, included)
+        output_xml = os.path.join(output_path, os.path.basename
+                                  (outputs['XML'][product_request]))
+        util.shutil.copyfile(outputs['XML'][product_request], output_xml)
     logger.info('    End zipping')
 
 
@@ -612,7 +615,7 @@ def process_browse(bands, workdir, tile_id, outpath):
     # internal pyramids
     addo_cmd = 'gdaladdo {} 2 4 8 16'
     util.execute_cmd(addo_cmd.format(browse_filename))
-    util.remove(temp_filename1, temp_filename2)
+    util.remove(temp_filename1, temp_filename2, browse_filename + '.aux.xml')
 
     logger.info('    End building browse.')
     if not os.path.exists(browse_filename):
