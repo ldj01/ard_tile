@@ -10,5 +10,7 @@ RUN pip install --upgrade PyYAML git+https://github.com/USGS-EROS/espa-python-li
 
 COPY ./* /usr/local/bin/
 WORKDIR /home/tilest
+RUN mkdir -p /usr/local/data && \
+    chmod 777 /usr/local/data
 
 ENTRYPOINT ["cli.py"]

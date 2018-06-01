@@ -22,8 +22,6 @@ def parse_cli():
 
 
 if __name__ == '__main__':
-    setup_logger()
-
     args = parse_cli()
     conf = config.read_config(args['config_file'])
     setup_logger(level='debug' if conf.debug else 'info')
