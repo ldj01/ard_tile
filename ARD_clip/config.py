@@ -37,9 +37,6 @@ def read_config(config_file=None):
     options = NamedAttrs()
 
     # Set the configuration values.
-    if config_file is None:
-        config_file = os.path.expanduser('~/ARD_Clip.conf')
-
     if len(config.read(config_file)) == 0:
         logger.error("Error opening config file %s.", config_file)
         sys.exit(1)

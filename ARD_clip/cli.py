@@ -16,6 +16,7 @@ def parse_cli():
     parser.add_argument(action="store", dest='output_path',
                         type=str, metavar='PATH')
     parser.add_argument('-c', '--config', action="store", dest='config_file',
+                        default='/ARD_Clip.conf',
                         required=False, type=str, metavar='PATH')
     return vars(parser.parse_args())
 

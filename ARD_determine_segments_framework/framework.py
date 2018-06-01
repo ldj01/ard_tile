@@ -109,11 +109,11 @@ class ArdTileScheduler(mesos.interface.Scheduler):
                 avail_cpus -= job.cpus
                 avail_disk -= job.disk
                 avail_mem -= job.mem
-                logger.debug('Using [%d]C [%d]M [%d]D from offer %s',
-                             job.cpus, job.mem, job.disk, offer.id)
+                logger.debug('Make job %s from offer %s',
+                             job, str(offer.id).strip())
 
             if tasks:
-                logger.debug('Launching %d tasks', len(tasks))
+                logger.debug('Launching %d tasks: %s', len(tasks), tasks)
                 driver.launchTasks(offer.id, tasks)
             else:
                 logger.debug('Decline offers: %s', offer.id)
@@ -203,8 +203,7 @@ class Job(object):
 
         configuration_volume = container.volumes.add()
         configuration_volume.host_path = conf.confloc
-        configuration_volume.container_path = (
-            os.path.expanduser('~/ARD_Clip.conf'))
+        configuration_volume.container_path = '/ARD_Clip.conf'
         configuration_volume.mode = 2  # mesos_pb2.Volume.Mode.RO
 
         # Specify container Docker image
