@@ -3,8 +3,7 @@
 import os
 import sys
 import ConfigParser
-
-from util import logger
+import logging
 
 
 class NamedAttrs(dict):
@@ -37,18 +36,19 @@ def read_config(config_file=None, disable_creds=False):
     # Set the configuration values.
     if config_file is None:
         config_file = os.path.expanduser('~/ARD_determine_segments.conf')
+    logging.debug('Read configuration: %s', config_file)
 
     # Set the configuration values.
     options.config_file = config_file
     options.disable_creds = disable_creds
 
     if not config.read(config_file):
-        logger.error("Error opening config file %s.", config_file)
+        logging.error("Error opening config file %s.", config_file)
         sys.exit(1)
 
     section = 'ard'
     if not config.has_section(section):
-        logger.error("Error: %s section not in config file.", section)
+        logging.error("Error: %s section not in config file.", section)
         sys.exit(1)
 
     options.l2_db_con = config.get(section, 'dbconnect')
@@ -63,7 +63,7 @@ def read_config(config_file=None, disable_creds=False):
     if not disable_creds:
         section = 'mesos'
         if not config.has_section(section):
-            logger.error("Error: %s section not in config file.", section)
+            logging.error("Error: %s section not in config file.", section)
             sys.exit(1)
         options.mesos_principal = config.get(section, 'principal')
         options.mesos_secret = config.get(section, 'secret')
@@ -75,7 +75,7 @@ def read_config(config_file=None, disable_creds=False):
 
     section = 'pgs_framework'
     if not config.has_section(section):
-        logger.error("Error: %s section not in config file.", section)
+        logging.error("Error: %s section not in config file.", section)
         sys.exit(1)
     options.framework_user = config.get(section, 'framework_user')
     options.input_method = config.get(section, 'input_method')
@@ -92,7 +92,7 @@ def read_config(config_file=None, disable_creds=False):
 
     section = 'ardclip'
     if not config.has_section(section):
-        logger.error("Error: %s section not in config file.", section)
+        logging.error("Error: %s section not in config file.", section)
         sys.exit(1)
     options.confloc = config.get(section, 'ard_conf_loc')
     options.indir = config.get(section, 'base_input_dir')

@@ -3,10 +3,9 @@
 import os
 import sys
 import ConfigParser
+import logging
 
 import yaml
-
-from util import logger
 
 
 class NamedAttrs(dict):
@@ -37,13 +36,14 @@ def read_config(config_file=None):
     options = NamedAttrs()
 
     # Set the configuration values.
+    logging.debug('Read configuration: %s', config_file)
     if len(config.read(config_file)) == 0:
-        logger.error("Error opening config file %s.", config_file)
+        logging.error("Error opening config file %s.", config_file)
         sys.exit(1)
 
     section = 'SectionOne'
     if not config.has_section(section):
-        logger.error("Error: %s section not in config file.", section)
+        logging.error("Error: %s section not in config file.", section)
         sys.exit(1)
 
     if config.has_option(section, 'dbconnect'):
