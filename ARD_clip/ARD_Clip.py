@@ -1,7 +1,6 @@
 """Intersect ARD Tile Grid and clip scenes."""
 
 import os
-import glob
 import logging
 
 
@@ -75,7 +74,7 @@ def process_tile(current_tile, segment, region,
             logger.debug('Fetch file locations from DB: %s', db_contrib_rec)
             if db_contrib_rec:
                 db_contrib_rec = {
-                    r['LANDSAT_PRODUCT_ID']: glob.glob(r['FILE_LOC'])[0]
+                    r['LANDSAT_PRODUCT_ID']: util.ffind(r['FILE_LOC'])
                     for r in db_contrib_rec
                 }
                 logger.info("Contributing scene from db: %s", db_contrib_rec)
@@ -713,7 +712,7 @@ def process_segments(segments, output_path, conf):
         # Results of this check should keep no more than 3 scenes
         # in work directory at a time
         if (i - 2) > -1:
-            previous_scene = segment[i - 2]['LANDSAT_PRODUCT_ID']
+            previous_scene = segments[i - 2]['LANDSAT_PRODUCT_ID']
             util.remove(previous_scene)
 
         scene_state = process_segment(segment, output_path, conf)
