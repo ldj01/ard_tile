@@ -178,7 +178,8 @@ def process_tile(current_tile, segment, region,
     )
 
     process_output(conf.products, producers, outputs, tile_id, output_path)
-    util.process_checksums(indir=conf.workdir, outdir=output_path)
+    util.process_checksums(indir=output_path, outdir=output_path,
+                           filext=tile_id+'*.tar')
     process_browse(producers['browse'], conf.workdir, tile_id, output_path)
 
     # Remove the temporary work directory,
