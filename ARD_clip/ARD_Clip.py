@@ -15,12 +15,13 @@ from ARD_regionLU import pathrow2regionLU
 from ARD_metadata import buildMetadata
 
 
-def process_tile(current_tile, segment, region,
+def process_tile(current_tile, tile_id, segment, region,
                  tiles_contrib_scenes, output_path, conf):
     """Process each tile needed for segment.
 
     Args:
-        current_tile (str): tile id string (e.g. LT04_CU_011003_...)
+        current_tile (dict):  information about current tile
+        tile_id (str): tile id string (e.g. LT04_CU_011003_...)
         segment (dict): information about a scene
         region (str): ARD grid tile area (e.g. CU, AK, HI)
         tiles_contrib_scenes (list): neighboring scene details
@@ -29,9 +30,6 @@ def process_tile(current_tile, segment, region,
 
     """
     production_timestamp = landsat.get_production_timestamp()
-    tile_id = landsat.generate_tile_id(segment['LANDSAT_PRODUCT_ID'],
-                                       current_tile, region,
-                                       conf.collection, conf.version)
     clip_extents = '{UL_X} {LL_Y} {LR_X} {UR_Y}'.format(**current_tile)
 
     logger.debug("tile_id: %s", tile_id)
@@ -178,17 +176,11 @@ def process_tile(current_tile, segment, region,
     )
 
     process_output(conf.products, producers, outputs, tile_id, output_path)
-    util.process_checksums(indir=output_path, outdir=output_path,
-                           filext=tile_id+'*.tar')
+    util.process_checksums(globext=os.path.join(output_path,
+                                                tile_id+'*.tar'))
     process_browse(producers['browse'], conf.workdir, tile_id, output_path)
 
-    # Remove the temporary work directory,
-    # but keep adjacent scenes for other tiles
     if not conf.debug:
-        logger.info('    Cleanup: Removing temp directory: %s ...',
-                    os.path.join(conf.workdir, tile_id))
-        util.remove(os.path.join(conf.workdir, tile_id))
-
         # No errors making this tile, record it in our database
         completed_tile_list = [
             [tile_id, ",".join(contributing_scenes.keys()),
@@ -676,7 +668,10 @@ def process_segment(segment, output_path, conf):
 
     for current_tile in hv_tiles:
         try:
-            tile_state = process_tile(current_tile, segment, region,
+            tile_id = landsat.generate_tile_id(segment['LANDSAT_PRODUCT_ID'],
+                                               current_tile, region,
+                                               conf.collection, conf.version)
+            tile_state = process_tile(current_tile, tile_id, segment, region,
                                       tile_scenes, output_path, conf)
         except ArdTileNotNeededException:
             logger.warning('Lineage file found 0 contributing scenes,'
@@ -690,6 +685,14 @@ def process_segment(segment, output_path, conf):
             logger.exception('Unexpected error processing tile %s !',
                              current_tile)
             tile_state = 'ERROR'
+
+        # Remove the temporary work directory,
+        # but keep adjacent scenes for other tiles
+        if not conf.debug:
+            logger.info('    Cleanup: Removing temp directory: %s ...',
+                        os.path.join(conf.workdir, tile_id))
+            util.remove(os.path.join(conf.workdir, tile_id))
+
 
         if tile_state in ('ERROR', 'NOT NEEDED'):
             scene_state = tile_state

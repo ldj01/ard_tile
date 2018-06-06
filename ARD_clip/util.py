@@ -59,6 +59,7 @@ def setup_logger(level='INFO', stream='stdout'):
     handler.setFormatter(formatter)
     handler.addFilter(L2pgsLoggingFilter())
 
+    logger.handlers = []
     logger.setLevel(logging_level)
     logger.addHandler(handler)
 
@@ -145,25 +146,22 @@ def checksum_md5(filename):
     return hashlib.md5(open(filename, 'rb').read()).hexdigest()
 
 
-def process_checksums(indir='.', filext="*.tar", outdir='.'):
+def process_checksums(globext="*.tar"):
     """Create md5 checksum files for all matching file types.
 
     Args:
-        indir (str): path to find files
-        filext (str): file extension glob to search for
-        outdir (str): path to write output files
+        globext (str): file glob to search for
 
     Returns:
         str: status of operation [SUCCESS, ERROR]
 
     """
-    fullnames = glob.glob(os.path.join(indir, filext))
+    fullnames = glob.glob(globext)
     for fullname in fullnames:
-        basename = os.path.basename(fullname)
-        md5name = os.path.join(outdir, basename.replace('.tar', '.md5'))
+        md5name = fullname.replace('.tar', '.md5')
         md5hash = checksum_md5(fullname)
-        with open(md5name) as fid:
-            fid.write(' '.join([md5hash, basename]))
+        with open(md5name, 'w') as fid:
+            fid.write(' '.join([md5hash, os.path.basename(fullname)]))
         make_file_group_writeable(md5name)
 
 
