@@ -115,7 +115,8 @@ def process_tile(current_tile, tile_id, segment, region,
     stacking = {i: {'LANDSAT_PRODUCT_ID': name,
                     'XML_LOC': util.ffind(conf.workdir, name, '*.xml')}
                 for i, name in zip(range(1, n_contrib_scenes+1),
-                                   sorted(contributing_scenes.keys()))}
+                                   sorted(contributing_scenes.keys(),
+                                          reverse=True))}
 
     util.make_dirs(os.path.join(conf.workdir, tile_id))
 
