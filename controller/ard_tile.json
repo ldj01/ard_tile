@@ -3,7 +3,7 @@
     "container": {
         "docker": {
             "forcePullImage": true,
-            "image": "losrlcmp02.cr.usgs.gov:5000/ard-segment:1.2.0",
+            "image": "losrlcmp02.cr.usgs.gov:5000/ard-segment:1.2.7.0",
             "network": "HOST",
             "parameters": [],
             "privileged": false
@@ -29,6 +29,18 @@
     },
     "cpus": 0.3,
     "disk": 0,
+    "env": {
+        "LIBPROCESS_SSL_CIPHERS": "ECDHE-RSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-SHA384:AES256-SHA256:AES128-SHA256",
+        "LIBPROCESS_SSL_ENABLED": "1",
+        "LIBPROCESS_SSL_VERIFY_CERT": "0",
+        "LIBPROCESS_SSL_CERT_FILE": "/etc/mesos/mesos_certpack/mesos.crt",
+        "LIBPROCESS_SSL_KEY_FILE": "/etc/mesos/mesos_certpack/mesos.key",
+        "LIBPROCESS_SSL_CA_DIR": "/etc/mesos/mesos_certpack",
+        "LIBPROCESS_SSL_ENABLE_SSL_V3": "0",
+        "LIBPROCESS_SSL_ENABLE_TLS_V1_0": "0",
+        "LIBPROCESS_SSL_ENABLE_TLS_V1_1": "0",
+        "LIBPROCESS_SSL_ENABLE_TLS_V1_2": "1"
+    },
     "fetch": [
         {
             "cache": false,

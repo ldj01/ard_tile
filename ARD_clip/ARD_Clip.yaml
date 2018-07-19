@@ -1,0 +1,231 @@
+
+LE07: &l457
+  rename:
+    toa_band1: TAB1
+    toa_band2: TAB2
+    toa_band3: TAB3
+    toa_band4: TAB4
+    toa_band5: TAB5
+    toa_band7: TAB7
+    solar_azimuth_band4: SOA4
+    solar_zenith_band4: SOZ4
+    sensor_azimuth_band4: SEA4
+    sensor_zenith_band4: SEZ4
+    bt_band6: BTB6
+    sr_band1: SRB1
+    sr_band2: SRB2
+    sr_band3: SRB3
+    sr_band4: SRB4
+    sr_band5: SRB5
+    sr_band7: SRB7
+    pixel_qa: PIXELQA
+    radsat_qa: RADSATQA
+    sr_atmos_opacity: SRATMOSOPACITYQA
+    sr_cloud_qa: SRCLOUDQA
+    dswe_diag: DIAG
+    dswe_intrpd: INTR
+    dswe_mask: MASK
+    dswe_pshsccss: INWM
+    percent_slope: SLOPE
+    hillshade: SHADE
+    st_downwelled_radiance: DRAD
+    st_upwelled_radiance: URAD
+    st_thermal_radiance: TRAD
+    st_atmospheric_transmittance: ATRAN
+    emis: EMIS
+    emis_stdev: EMSD
+    st_cloud_distance: CDIST
+    st_qa: STQA
+    surface_temperature: ST
+
+  datatype:
+    "[ TYPE: Int16 ][ RANGE: -100,16000 ][ FILL: -9999 ]":
+      - toa_band1
+      - toa_band2
+      - toa_band3
+      - toa_band4
+      - toa_band5
+      - toa_band7
+      - bt_band6
+
+    "[ TYPE: Int16 ][ RANGE: -32767,32767 ][ FILL: -32768 ]":
+      - solar_azimuth_band4
+      - solar_zenith_band4
+      - sensor_azimuth_band4
+      - sensor_zenith_band4
+
+    "[ TYPE: Int16 ][ RANGE: -2000,16000 ][ FILL: -9999 ]":
+      - sr_band1
+      - sr_band2
+      - sr_band3
+      - sr_band4
+      - sr_band5
+      - sr_band7
+
+    "[ TYPE: Int16 ][ RANGE: ??? ][ FILL: -9999 ]":
+      - sr_atmos_opacity
+      - dswe_diag
+      - surface_temperature
+      - st_downwelled_radiance
+      - st_upwelled_radiance
+      - st_thermal_radiance
+      - st_atmospheric_transmittance
+      - st_cloud_distance
+      - emis
+      - st_qa
+
+    "[ TYPE: UInt16 ][ RANGE: 0,65535 ][ FILL: 1 ]":
+      - radsat_qa
+      - pixel_qa
+
+    "[ TYPE: UInt8 ][ RANGE: 0,255 ][ FILL: 255 ]":
+      - dswe_intrpd
+      - dswe_mask
+      - dswe_pshsccss
+
+    "[ TYPE: UInt8 ][ RANGE: 0,255 ][ FILL: NA ][ +LINEAGE ]":
+      - sr_cloud_qa
+
+    "[ TYPE: Int16 ][ RANGE: 0,255 ][ FILL: -9999 ][ +LINEAGE ]":
+      - hillshade
+
+    "[ TYPE: Int16 ][ RANGE: ??? ][ FILL: -9999 ][ +LINEAGE ]":
+      - emis_stdev
+      - percent_slope
+
+  package:
+    TA: [TAB1, TAB2, TAB3, TAB4, TAB5, TAB7, SOA4, SOZ4, SEA4, SEZ4, RADSATQA, PIXELQA, LINEAGEQA]
+    BT: [BTB6, RADSATQA, PIXELQA, LINEAGEQA]
+    SR: [SRB1, SRB2, SRB3, SRB4, SRB5, SRB7, SRATMOSOPACITYQA, SRCLOUDQA, RADSATQA, PIXELQA, LINEAGEQA]
+    QA: [SRATMOSOPACITYQA, SRCLOUDQA, STQA, RADSATQA, PIXELQA, LINEAGEQA]
+    ST: [ST, DRAD, URAD, TRAD, EMIS, EMSD, CDIST, ATRAN, STQA, RADSATQA, PIXELQA, LINEAGEQA]
+    SW: [MASK, DIAG, INTR, INWM, SLOPE, SHADE]
+
+  browse:
+    blue:  TAB3
+    green: TAB4
+    red:   TAB5
+
+  xml:
+    ARD: [ TA, BT, SR, ST, QA ]
+    L3: [ SW ]
+
+LT05:
+  <<: *l457
+
+LT04:
+  <<: *l457
+
+LC08:
+  <<: *l457
+  rename:
+    toa_band1: TAB1
+    toa_band2: TAB2
+    toa_band3: TAB3
+    toa_band4: TAB4
+    toa_band5: TAB5
+    toa_band6: TAB6
+    toa_band7: TAB7
+    toa_band9: TAB9
+    solar_azimuth_band4: SOA4
+    solar_zenith_band4: SOZ4
+    sensor_azimuth_band4: SEA4
+    sensor_zenith_band4: SEZ4
+    bt_band10: BTB10
+    bt_band11: BTB11
+    sr_band1: SRB1
+    sr_band2: SRB2
+    sr_band3: SRB3
+    sr_band4: SRB4
+    sr_band5: SRB5
+    sr_band6: SRB6
+    sr_band7: SRB7
+    pixel_qa: PIXELQA
+    radsat_qa: RADSATQA
+    sr_aerosol: SRAEROSOLQA
+    dswe_diag: DIAG
+    dswe_intrpd: INTR
+    dswe_mask: MASK
+    dswe_pshsccss: INWM
+    percent_slope: SLOPE
+    hillshade: SHADE
+    st_downwelled_radiance: DRAD
+    st_upwelled_radiance: URAD
+    st_thermal_radiance: TRAD
+    st_atmospheric_transmittance: ATRAN
+    emis: EMIS
+    emis_stdev: EMSD
+    st_cloud_distance: CDIST
+    st_qa: STQA
+    surface_temperature: ST
+
+  datatype:
+    "[ TYPE: Int16 ][ RANGE: -100,16000 ][ FILL: -9999 ]":
+      - toa_band1
+      - toa_band2
+      - toa_band3
+      - toa_band4
+      - toa_band5
+      - toa_band6
+      - toa_band7
+      - toa_band9
+      - bt_band10
+      - bt_band11
+
+    "[ TYPE: Int16 ][ RANGE: -32767,32767 ][ FILL: -32768 ]":
+      - solar_azimuth_band4
+      - solar_zenith_band4
+      - sensor_azimuth_band4
+      - sensor_zenith_band4
+
+    "[ TYPE: Int16 ][ RANGE: -2000,16000 ][ FILL: -9999 ]":
+      - sr_band1
+      - sr_band2
+      - sr_band3
+      - sr_band4
+      - sr_band5
+      - sr_band6
+      - sr_band7
+
+    "[ TYPE: Int16 ][ RANGE: ??? ][ FILL: -9999 ]":
+      - dswe_diag
+      - surface_temperature
+      - st_downwelled_radiance
+      - st_upwelled_radiance
+      - st_thermal_radiance
+      - st_atmospheric_transmittance
+      - st_cloud_distance
+      - emis
+      - st_qa
+
+    "[ TYPE: UInt16 ][ RANGE: 0,65535 ][ FILL: 1 ]":
+      - radsat_qa
+      - pixel_qa
+
+    "[ TYPE: UInt8 ][ RANGE: 0,255 ][ FILL: 1 ]":
+      - sr_aerosol
+
+    "[ TYPE: UInt8 ][ RANGE: 0,255 ][ FILL: 255 ]":
+      - dswe_intrpd
+      - dswe_mask
+      - dswe_pshsccss
+
+    "[ TYPE: Int16 ][ RANGE: 0,255 ][ FILL: -9999 ][ +LINEAGE ]":
+      - hillshade
+
+    "[ TYPE: Int16 ][ RANGE: ??? ][ FILL: -9999 ][ +LINEAGE ]":
+      - emis_stdev
+      - percent_slope
+
+  package:
+    TA: [TAB1, TAB2, TAB3, TAB4, TAB5, TAB6, TAB7, TAB9, SOA4, SOZ4, SEA4, SEZ4, RADSATQA, PIXELQA, LINEAGEQA]
+    BT: [BTB10, BTB11, RADSATQA, PIXELQA, LINEAGEQA]
+    SR: [SRB1, SRB2, SRB3, SRB4, SRB5, SRB6, SRB7, SRAEROSOLQA, RADSATQA, PIXELQA, LINEAGEQA]
+    QA: [SRAEROSOLQA, STQA, RADSATQA, PIXELQA, LINEAGEQA]
+    ST: [ST, DRAD, URAD, TRAD, EMIS, EMSD, CDIST, ATRAN, STQA, RADSATQA, PIXELQA, LINEAGEQA]
+    SW: [MASK, DIAG, INTR, INWM, SLOPE, SHADE]
+
+  browse:
+    blue:  TAB4
+    green: TAB5
+    red:   TAB6
