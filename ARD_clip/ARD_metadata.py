@@ -436,7 +436,7 @@ def createPixelTypeTuple(longsTuple):
     fillLong = longsTuple['fill'] / 25000000.0 * 100.0
     retval['fill'] = '{:0.4f}'.format(fillLong)
 
-    numNonFillPixels = 25000000.0 - fillLong
+    numNonFillPixels = 25000000.0 - longsTuple['fill']
 
     # Calculate Cloud Cover
     cloudLong = longsTuple['cloud_cover'] / numNonFillPixels * 100.0
