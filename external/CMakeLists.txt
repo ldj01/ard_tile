@@ -14,7 +14,7 @@ execute_process(COMMAND git rev-parse --short HEAD OUTPUT_VARIABLE COMMIT
 set (COMMIT_TAG ${REPO}:${COMMIT})
 set (BRANCH_TAG ${REPO}:${BRANCH}-${VERSION})
 
-add_custom_target(external ALL
+add_custom_target(external
                   COMMAND docker build --target geos-ard-external
                                        -f Dockerfile -t ${COMMIT_TAG}
                                        --rm --compress .

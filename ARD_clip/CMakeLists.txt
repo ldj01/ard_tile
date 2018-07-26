@@ -14,7 +14,7 @@ execute_process(COMMAND git rev-parse --short HEAD OUTPUT_VARIABLE COMMIT
 set (COMMIT_TAG ${REPO}:${COMMIT})
 set (BRANCH_TAG ${REPO}:${BRANCH}-${VERSION})
 
-add_custom_target(ard-clip ALL
+add_custom_target(ard-clip
                   COMMAND docker build --target ard-clip
                                        -f Dockerfile -t ${COMMIT_TAG}
                                        --rm --compress .
