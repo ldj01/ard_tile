@@ -1,0 +1,20 @@
+This file describes the build and installation procedures for the ARD tiling
+package.
+
+Controller
+----------
+mkdir build && cd build
+cmake .. -CMAKE_INSTALL_PREFIX:PATH=/usr/local/usgs/ard_tile
+make
+make install
+
+Segment framework and clip Docker images
+----------------------------------------
+Verify the version.txt files, and update if necessary:
+  external/version.txt
+  ARD_determine_segments_framework/version.txt
+  ARD_clip/version.txt
+  
+mkdir build && cd build
+cmake ..
+make deploy
