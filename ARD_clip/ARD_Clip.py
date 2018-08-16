@@ -112,11 +112,9 @@ def process_tile(current_tile, tile_id, segment, region,
 
     # Determine which scene(s) will overlay the other scene(s) for this tile.
     # North scenes (--row#) will always overlay South scenes (++row#)
-    stacking = {i: {'LANDSAT_PRODUCT_ID': name,
-                    'XML_LOC': util.ffind(conf.workdir, name, '*.xml')}
-                for i, name in zip(range(1, n_contrib_scenes+1),
-                                   sorted(contributing_scenes.keys(),
-                                          reverse=True))}
+    stacking = [{'LANDSAT_PRODUCT_ID': name,
+                 'XML_LOC': util.ffind(conf.workdir, name, '*.xml')}
+                for name in sorted(contributing_scenes.keys())]
 
     util.make_dirs(os.path.join(conf.workdir, tile_id))
 
@@ -207,7 +205,7 @@ def direct_clip(stacking, band_name, clip_extents, tile_id, rename, workdir):
         ' -co "tiled=yes" -co "predictor=2"'
     ).format(extents=clip_extents)
 
-    for stack in stacking.values():
+    for stack in reversed(stacking):
         scene_name = util.ffind(workdir, stack['LANDSAT_PRODUCT_ID'],
                                 '*' + band_name + '.tif')
         warp_cmd += ' ' + scene_name
@@ -234,7 +232,7 @@ def process_lineage(stacking, band_name, clip_extents,
         return lineage_filename
 
     temp_names = list()
-    for level, stack in stacking.items():
+    for level, stack in reversed(list(enumerate(stacking, start=1))):
         temp_name = lineage_filename.replace('.tif',
                                              '_srcTemp%d' % level + '.tif')
         scene_name = util.ffind(workdir, stack['LANDSAT_PRODUCT_ID'],
@@ -338,7 +336,7 @@ def fill_zero_na_lineage(stacking, band_name, clip_extents,
 
     temp_clipped_names = list()
     temp_masked_names = list()
-    for level, stack in stacking.items():
+    for level, stack in reversed(list(enumerate(stacking, start=1))):
         scene_name = util.ffind(workdir, stack['LANDSAT_PRODUCT_ID'],
                                 '*' + band_name + '.tif')
         lineg_name = util.ffind(workdir, tile_id, '*LINEAGEQA.tif')
@@ -398,7 +396,7 @@ def calc_nodata_9999_uint_lineage(stacking, band_name, clip_extents,
 
     temp_clipped_names = list()
     temp_masked_names = list()
-    for level, stack in stacking.items():
+    for level, stack in reversed(list(enumerate(stacking, start=1))):
         scene_name = util.ffind(workdir, stack['LANDSAT_PRODUCT_ID'],
                                 '*' + band_name + '.tif')
 
@@ -458,7 +456,7 @@ def calc_nodata_9999_lineage(stacking, band_name, clip_extents,
 
     temp_clipped_names = list()
     temp_masked_names = list()
-    for level, stack in stacking.items():
+    for level, stack in reversed(list(enumerate(stacking, start=1))):
         scene_name = util.ffind(workdir, stack['LANDSAT_PRODUCT_ID'],
                                 '*' + band_name + '.tif')
 
@@ -514,7 +512,7 @@ def process_metadata(segment, stacking, tile_id, clip_extents, region,
     bit_counts = geofuncs.raster_value_count(pqa_name, tile_id)
 
     metadata_locs = list()
-    for stack in stacking.values():
+    for stack in stacking:
         metadata_locs.append({
             'L2XML': util.ffind(workdir, stack['LANDSAT_PRODUCT_ID'],
                                 "*.xml"),
