@@ -122,6 +122,13 @@ def select_consecutive_scene(connection, acqdate, wrsrow, wrspath,
     results = select(connection, ls_prod_id_sql,
                      acqdate=acqdate, minrow=int(wrsrow)-n,
                      maxrow=int(wrsrow)+n, wrspath=int(wrspath))
+    # ldj
+    results = [{'LANDSAT_SCENE_ID':'LC80810152018059LGN00'},
+               {'LANDSAT_SCENE_ID':'LC80810142018059LGN00'},
+               {'LANDSAT_SCENE_ID':'LC80810112018059LGN00'},
+               {'LANDSAT_SCENE_ID':'LC80810122018059LGN00'},
+               {'LANDSAT_SCENE_ID':'LC80810132018059LGN00'}]
+    # ldj
     return [r['LANDSAT_SCENE_ID'] for r in results]
 
 
@@ -140,6 +147,14 @@ def select_corner_polys(connection, scene_ids):
     # Oracle does not support binding for IN
     scene_ids_fmtd = ",".join(["'%s'" % x for x in scene_ids])
     poly_intersect_sql = poly_intersect_sql.format(scene_ids_fmtd)
+    # ldj
+    return [{'LANDSAT_PRODUCT_ID':'LC08_L2TP_081014_20180228_20180309_01_A2',
+	     'COORDS':'POLYGON ((-168.04919 66.68988, -167.79469 64.42109, -162.57446 64.42765, -162.35348 66.69717, -168.04919 66.68988))'},
+            {'LANDSAT_PRODUCT_ID':'LC08_L2GT_081015_20180228_20180309_01_A2',
+	     'COORDS':'POLYGON ((-169.19001 65.30737, -168.86046 63.03811, -163.88121 63.08633, -163.7854 65.36071, -169.19001 65.30737))'},
+            {'LANDSAT_PRODUCT_ID':'LC08_L2GT_081013_20180228_20180309_01_A2',
+	     'COORDS':'POLYGON ((-166.78239 68.06336, -166.62421 65.79571, -161.13953 65.75558, -160.76465 68.01859, -166.78239 68.06336))'}]
+    # ldj
     return select(connection, poly_intersect_sql)
 
 
@@ -161,4 +176,10 @@ def fetch_file_loc(connection, sat, wildcard):
         " SATELLITE = :sat AND LANDSAT_PRODUCT_ID like :wildcard"
         " order by LANDSAT_PRODUCT_ID desc"
     )
+    # ldj
+    if wildcard == '%081014_20180228%':
+        return [{'FILE_LOC':'/hsm/lsat1/collection01/oli_tirs/A2_L2/2018/81/14/LC080810142018022801A2-SC*.tar.gz', 'LANDSAT_PRODUCT_ID':'LC08_L2TP_081014_20180228_20180309_01_A2'}]
+    if wildcard == '%081015_20180228%':
+        return [{'FILE_LOC':'/hsm/lsat1/collection01/oli_tirs/A2_L2/2018/81/15/LC080810152018022801A2-SC*.tar.gz', 'LANDSAT_PRODUCT_ID':'LC08_L2GT_081015_20180228_20180309_01_A2'}]
+    # ldj
     return select(connection, file_loc_sql, sat=sat, wildcard=wildcard)
