@@ -111,10 +111,12 @@ def process_tile(current_tile, tile_id, segment, region,
     logger.info('Starting to build tile: %s', tile_id)
 
     # Determine which scene(s) will overlay the other scene(s) for this tile.
-    # North scenes (--row#) will always overlay South scenes (++row#)
+    # North scenes (--row#) will always overlay South scenes (++row#).
+    # The row values are characters 13 - 15 in the product ID.
     stacking = [{'LANDSAT_PRODUCT_ID': name,
                  'XML_LOC': util.ffind(conf.workdir, name, '*.xml')}
-                for name in sorted(contributing_scenes.keys())]
+                for name in sorted(contributing_scenes,
+                                   key=lambda x: x[13:])]
 
     util.make_dirs(os.path.join(conf.workdir, tile_id))
 
