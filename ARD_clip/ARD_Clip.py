@@ -177,7 +177,10 @@ def process_tile(current_tile, tile_id, segment, region,
     process_output(conf.products, producers, outputs, tile_id, output_path)
     util.process_checksums(globext=os.path.join(output_path,
                                                 tile_id+'*.tar'))
-    process_browse(producers['browse'], conf.workdir, tile_id, output_path)
+    if process_browse(producers['browse'], conf.workdir, tile_id,
+                      output_path) != 0:
+        logger.error('Failed to produce the browse image.')
+        return "ERROR"
 
     if not conf.debug:
         # No errors making this tile, record it in our database
@@ -592,27 +595,39 @@ def process_browse(bands, workdir, tile_id, outpath):
     # create RGB image
     temp_filename1 = browse_filename.replace('.tif', '_brw1.tif')
     merge_cmd = 'gdal_merge.py -o {outfile} -separate {red} {green} {blue}'
-    util.execute_cmd(merge_cmd.format(outfile=temp_filename1, **bands))
+    results = util.execute_cmd(merge_cmd.format(outfile=temp_filename1,
+                                                **bands))
+    if results['status'] != 0:
+        return results['status']
 
     # scale the pixel values
     temp_filename2 = browse_filename.replace('.tif', '_brw2.tif')
     scale_cmd = 'gdal_translate -scale 0 10000 -ot Byte {} {}'
-    util.execute_cmd(scale_cmd.format(temp_filename1, temp_filename2))
+    results = util.execute_cmd(scale_cmd.format(temp_filename1,
+                                                temp_filename2))
+    if results['status'] != 0:
+        return results['status']
 
     # apply compression
     comp_cmd = 'gdal_translate -co COMPRESS=JPEG -co PHOTOMETRIC=YCBCR {} {}'
-    util.execute_cmd(comp_cmd.format(temp_filename2, browse_filename))
+    results = util.execute_cmd(comp_cmd.format(temp_filename2,
+                                               browse_filename))
+    if results['status'] != 0:
+        return results['status']
 
     # internal pyramids
     addo_cmd = 'gdaladdo {} 2 4 8 16'
-    util.execute_cmd(addo_cmd.format(browse_filename))
+    results = util.execute_cmd(addo_cmd.format(browse_filename))
+    if results['status'] != 0:
+        return results['status']
+
     util.remove(temp_filename1, temp_filename2, browse_filename + '.aux.xml')
 
     logger.info('    End building browse.')
     if not os.path.exists(browse_filename):
         logger.error('Processing failed to generate desired output: %s',
                      browse_filename)
-    return browse_filename
+    return 0
 
 
 class ArdTileNotNeededException(Exception):
