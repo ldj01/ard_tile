@@ -8,7 +8,7 @@ set (LINK_PROJECT_EXECUTABLES true)
 project (ardtile NONE)
 
 set (SYSTEM_NAME ardtile)
-set (SYSTEM_VERSION 1.3.0)
+set (SYSTEM_VERSION 1.3.1)
 
 add_custom_target(debug)
 add_custom_target(tag)
