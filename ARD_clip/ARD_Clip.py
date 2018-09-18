@@ -2,7 +2,7 @@
 
 import os
 import logging
-
+import time
 
 import db
 import util
@@ -593,7 +593,7 @@ def process_browse(bands, workdir, tile_id, outpath):
              for k, v in bands.items()}
 
     # create RGB image
-    temp_filename1 = browse_filename.replace('.tif', '_brw1.tif')
+    temp_filename1 =  os.path.join(workdir, tile_id + '_brw1.tif')
     merge_cmd = 'gdal_merge.py -o {outfile} -separate {red} {green} {blue}'
     results = util.execute_cmd(merge_cmd.format(outfile=temp_filename1,
                                                 **bands))
@@ -601,7 +601,7 @@ def process_browse(bands, workdir, tile_id, outpath):
         return results['status']
 
     # scale the pixel values
-    temp_filename2 = browse_filename.replace('.tif', '_brw2.tif')
+    temp_filename2 = os.path.join(workdir, tile_id + '_brw2.tif')
     scale_cmd = 'gdal_translate -scale 0 10000 -ot Byte {} {}'
     results = util.execute_cmd(scale_cmd.format(temp_filename1,
                                                 temp_filename2))
@@ -613,13 +613,28 @@ def process_browse(bands, workdir, tile_id, outpath):
     results = util.execute_cmd(comp_cmd.format(temp_filename2,
                                                browse_filename))
     if results['status'] != 0:
-        return results['status']
+        # The browse generation failed on the HSM.
+        # Wait a short period and try again.
+        logger.warning('gdal_translate failed to create the browse.  '
+                       'Trying again.')
+        time.sleep(10)
+        results = util.execute_cmd(comp_cmd.format(temp_filename2,
+                                               browse_filename))
+        if results['status'] != 0:
+            return results['status']
 
     # internal pyramids
     addo_cmd = 'gdaladdo {} 2 4 8 16'
     results = util.execute_cmd(addo_cmd.format(browse_filename))
     if results['status'] != 0:
-        return results['status']
+        # The pyramid generation failed on the HSM.
+        # Wait a short period and try again.
+        logger.warning('gdaladdo failed to create the pyramids.  '
+                       'Trying again.')
+        time.sleep(10)
+        results = util.execute_cmd(addo_cmd.format(browse_filename))
+        if results['status'] != 0:
+            return results['status']
 
     util.remove(temp_filename1, temp_filename2, browse_filename + '.aux.xml')
 
