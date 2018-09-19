@@ -28,7 +28,7 @@ import cx_Oracle
 
 
 # Specify the software version
-SYSTEM_VERSION = 'ARDTILE_1.3.0'
+SYSTEM_VERSION = 'ARDTILE_1.3.1'
 
 # Specify the ARD tables where we will get info from
 DB_ARD_SCENES = 'ARD_PROCESSED_SCENES'
