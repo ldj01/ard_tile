@@ -22,7 +22,7 @@ retrieve information regarding the scenes being processed.
 The controller installation takes place on the designated workstation
 or server, and is conducted as follows:
 
-> `mkdir build` (if not already existing)
+> `mkdir build` (if not already existing)   
   `cd build`  
   `cmake .. -CMAKE_INSTALL_PREFIX:PATH=/usr/local/usgs/ard_tile`  
   `make`  
