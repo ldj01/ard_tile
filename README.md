@@ -41,3 +41,9 @@ Create and deploy the Docker images:
   `cd build`  
   `cmake ..`  
   `make deploy`
+
+If you want to test the containers before deployment, run the following
+in lieu of "`make deploy`":
+
+> `make ard-clip`  
+  `make ard-segment`
