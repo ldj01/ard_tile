@@ -65,7 +65,7 @@ from the SCENE\_COORDINATE\_MASTER\_V table.  Input scene locations are
 retrieved from the ARD\_L2\_ALBERS\_INVENTORY\_V table.
 
 The controller polls the ARD\_PROCESSED\_SCENES table for the number of scenes
-in the various states of processing (complete, inqueue, inwork, blank, and can
+in the various states of processing (complete, inqueue, inwork, blank), and can
 also list the product IDs for scenes in these states.  It also counts the number
 of scenes in ARD\_UNPROCESSED\_SCENES\_V that are remaining.
 If the operator requests a count of the scenes in an error state,
