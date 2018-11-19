@@ -1,0 +1,41 @@
+\documentclass[11pt,oneside]{article}
+\RequirePackage[letterpaper, portrait, margin=1in]{geometry}
+\RequirePackage{pgfplots}
+\usepackage[active,pdftex,floats,tightpage]{preview}
+\usepgfplotslibrary{dateplot}
+\usetikzlibrary{arrows}
+
+\pgfplotsset{compat=1.13}
+\pgfplotsset{tick label style={font=\small}}
+
+\input{variables}
+
+\begin{document}
+
+\begin{figure*}[h]
+\begin{tikzpicture}
+  \begin{axis}[date coordinates in=x,
+               title={ARD tiles generated (up to 200 simultaneous)},
+               xlabel=Date,
+               ylabel=Tiles completed per hour,
+               width=0.95\textwidth, height=0.6\textwidth,
+               \dateticks,
+               xticklabel=\month-\day,
+               xticklabel style={major tick length=6pt},
+               grid=major,
+               \extradateticks,
+               extra x tick style={xticklabel=,
+                                   major tick length=3pt},
+               date ZERO=\datebegin,
+               xmin=\datebegin,
+               xmax=\dateend,
+               ymin=-20,
+               ymax=1200]
+   \addplot[ybar interval, fill=blue, draw=blue!80!black, line width=0.1pt]
+       table[col sep=comma, x=Date, y=Tiles_completed]
+       {ard_tiles.dat};
+  \end{axis}
+\end{tikzpicture}
+\end{figure*}
+
+\end{document}

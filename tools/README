@@ -1,0 +1,26 @@
+This is the README file for the ard_tile/tools directory.
+
+ard_tile_stats.py
+-----------------
+The ard_tile_stats.py script retrieves counts of tiles completed
+within given intervals from the ard_completed_tiles database table.  The
+counts are output to stdout in the format of "timestamp, count".  This
+output can be placed in a file to be read by the ard_tiles_histogram.tex
+file to generate a histogram.  Following is a walkthrough of the procedure:
+
+Run the Python script:
+
+  ./ard_tile_stats.py "<db_connection_string>" <start_date> <end_date> \
+                      <bin_size_minutes> <outfile>
+
+  Example:
+
+  ./ard_tile_stats.py "username/password@server/database" \
+                    16-11-2018 20-11-2018 60 prod_20181119.dat
+
+Create the histogram bar chart:
+
+  ln -sf prod_20181119.dat ard_tiles.dat
+  pdflatex ard_tiles
+  mv ard_tiles.pdf tiles_prod_20181119.pdf
+  okular tiles_prod_20181119.pdf
