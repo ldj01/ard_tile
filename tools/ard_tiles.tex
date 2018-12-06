@@ -30,10 +30,17 @@
                xmin=\datebegin,
                xmax=\dateend,
                ymin=-20,
-               ymax=1200]
+               ymax=1500,
+               legend style={at={(0.5,0.95)}, anchor=north}]
    \addplot[ybar interval, fill=blue, draw=blue!80!black, line width=0.1pt]
        table[col sep=comma, x=Date, y=Tiles_completed]
        {ard_tiles.dat};
+   \addlegendentry{All}
+   \addplot[ybar interval, fill=red!90!black, draw=red!80!black,
+            line width=0.1pt]
+       table[col sep=comma, x=Date, y=Tiles_completed]
+       {ard_tiles_nodupes.dat};
+   \addlegendentry{Exclude reproc}
   \end{axis}
 \end{tikzpicture}
 \end{figure*}

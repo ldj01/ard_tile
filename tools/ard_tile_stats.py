@@ -25,6 +25,9 @@ parser.add_argument('end_date', help='End date (dd-mm-yyyy)')
 parser.add_argument('timestep', type=int,
                     help='Histogram time step (minutes)')
 parser.add_argument('out_file', help='Output filename')
+parser.add_argument('--ignore_dupes', dest='ignore_dupes',
+                    action='store_true', default=False,
+                    help='Ignore duplicates flag')
 args = parser.parse_args()
 
 # Connect to the database.
@@ -48,9 +51,19 @@ of.write(os.linesep)
 total = 0
 while start_time < end_time:
     stop_time = start_time + delta_time
-    curs.execute("select count(*) from ard_completed_tiles where "
-                 "date_completed >= :s and date_completed < :e",
-                 {'s': start_time, 'e': stop_time})
+    if (args.ignore_dupes):
+        curs.execute("select count(*) from "
+                     "(select tile_id, date_completed, row_number() "
+                     "over(partition by substr(tile_id, 1, 23) "
+                     "order by date_completed asc) num "
+                     "from ard_completed_tiles) "
+                     "where num = 1 and date_completed >= :s "
+                     "and date_completed < :e",
+                     {'s': start_time, 'e': stop_time})
+    else:
+        curs.execute("select count(*) from ard_completed_tiles where "
+                     "date_completed >= :s and date_completed < :e",
+                     {'s': start_time, 'e': stop_time})
     count = curs.fetchone()[0]
     record = ' {},    {:5d}'.format(str(start_time), count)
     of.write(record)
@@ -61,8 +74,13 @@ while start_time < end_time:
 
 # Get the total number of products generated.
 prod_begin_time = datetime.strptime(PROC_BEGIN_DATE, '%d-%m-%Y')
-curs.execute("select count(*) from ard_completed_tiles where "
-             "date_completed >= :s", {'s': prod_begin_time})
+if (args.ignore_dupes):
+    curs.execute("select count(distinct substr(tile_id, 1, 23)) "
+                 "from ard_completed_tiles where "
+                 "date_completed >= :s", {'s': prod_begin_time})
+else:
+    curs.execute("select count(*) from ard_completed_tiles where "
+                 "date_completed >= :s", {'s': prod_begin_time})
 total_overall = curs.fetchone()[0]
 
 # Close the database connection.
