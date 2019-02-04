@@ -49,7 +49,7 @@ delta_time = timedelta(0, 0, 0, 0, args.timestep)
 of.write('Date,  Tiles_completed')
 of.write(os.linesep)
 total = 0
-while start_time < end_time:
+while start_time < end_time and start_time < datetime.now():
     stop_time = start_time + delta_time
     if (args.ignore_dupes):
         curs.execute("select count(*) from "
