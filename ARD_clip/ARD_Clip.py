@@ -587,11 +587,11 @@ def process_browse(bands, workdir, tile_id, outpath):
     """Create a pyramid-layered RBG browse file for EE."""
     logger.info('     Start processing for BROWSE')
 
-    browse_filename = os.path.join(outpath, tile_id + '.tif')
-
-    if os.path.exists(browse_filename):
-        logger.warning("Skip previously generated result %s", browse_filename)
-        return browse_filename
+    output_browse_filename = os.path.join(outpath, tile_id + '.tif')
+    if os.path.exists(output_browse_filename):
+        logger.warning("Skip previously generated result %s",
+                       output_browse_filename)
+        return output_browse_filename
 
     bands = {k: util.ffind(workdir, tile_id, tile_id + '_' + v + '.tif')
              for k, v in bands.items()}
@@ -613,6 +613,7 @@ def process_browse(bands, workdir, tile_id, outpath):
         return results['status']
 
     # apply compression
+    browse_filename = os.path.join(workdir, tile_id + '.tif')
     comp_cmd = 'gdal_translate -co COMPRESS=JPEG -co PHOTOMETRIC=YCBCR {} {}'
     results = util.execute_cmd(comp_cmd.format(temp_filename2,
                                                browse_filename))
@@ -623,7 +624,7 @@ def process_browse(bands, workdir, tile_id, outpath):
                        'Trying again.')
         time.sleep(10)
         results = util.execute_cmd(comp_cmd.format(temp_filename2,
-                                               browse_filename))
+                                                   browse_filename))
         if results['status'] != 0:
             return results['status']
 
@@ -642,10 +643,13 @@ def process_browse(bands, workdir, tile_id, outpath):
 
     util.remove(temp_filename1, temp_filename2, browse_filename + '.aux.xml')
 
+    # Copy the browse to the output location, and verify using checksums.
+    util.shutil.copyfile(browse_filename, output_browse_filename)
+    if checksum_md5(browse_filename) != checksum_md5(output_browse_filename):
+        logger.warning('%s checksums do not match.', browse_filename)
+        return 1
+
     logger.info('    End building browse.')
-    if not os.path.exists(browse_filename):
-        logger.error('Processing failed to generate desired output: %s',
-                     browse_filename)
     return 0
 
 
