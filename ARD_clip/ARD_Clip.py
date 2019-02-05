@@ -177,8 +177,9 @@ def process_tile(current_tile, tile_id, segment, region,
     )
 
     process_output(conf.products, producers, outputs, tile_id, output_path)
-    util.process_checksums(globext=os.path.join(output_path,
-                                                tile_id+'*.tar'))
+    if util.process_checksums(tile_id+'*.tar', output_path) == 'ERROR':
+        logger.error('Checksum processing failed.')
+        return "ERROR"
     if process_browse(producers['browse'], conf.workdir, tile_id,
                       output_path) != 0:
         logger.error('Failed to produce the browse image.')
