@@ -146,23 +146,38 @@ def checksum_md5(filename):
     return hashlib.md5(open(filename, 'rb').read()).hexdigest()
 
 
-def process_checksums(globext="*.tar"):
-    """Create md5 checksum files for all matching file types.
+def process_checksums(globext, workdir, output_path):
+    """Create md5 checksum files for all matching file types, and
+       compare with local files.
 
     Args:
         globext (str): file glob to search for
+        output_path (str): output directory location
 
     Returns:
         str: status of operation [SUCCESS, ERROR]
 
     """
-    fullnames = glob.glob(globext)
+    fullnames = glob.glob(os.path.join(workdir, globext))
     for fullname in fullnames:
         md5name = fullname.replace('.tar', '.md5')
         md5hash = checksum_md5(fullname)
+        basename = os.path.basename(fullname)
+        if md5hash != checksum_md5(os.path.join(output_path, basename)):
+            logging.error('%s checksums do not match.', basename)
+            return "ERROR"
+        else:
+            logger.info('%s checksums match.', basename)
+
         with open(md5name, 'w') as fid:
-            fid.write(' '.join([md5hash, os.path.basename(fullname)]))
-        make_file_group_writeable(md5name)
+            fid.write(' '.join([md5hash, basename]))
+
+        md5name_out = os.path.join(output_path, os.path.basename(md5name))
+        shutil.copyfile(md5name, md5name_out)
+        make_file_group_writeable(md5name_out)
+        os.remove(md5name)
+
+    return "SUCCESS"
 
 
 def tar_archive(output_filename, files):
@@ -231,7 +246,11 @@ def ffind(*paths):
     """
     search = os.path.join(*paths)
     logger.info('Find files: %s', search)
-    return glob.glob(search).pop()
+    file_list = glob.glob(search)
+    if file_list:
+        return file_list.pop()
+    else:
+        logger.error('No file matches %s', search)
 
 
 def remove(*paths):

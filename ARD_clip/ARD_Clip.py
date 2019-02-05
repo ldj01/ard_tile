@@ -3,6 +3,8 @@
 import os
 import logging
 import time
+import glob
+import shutil
 
 import db
 import util
@@ -75,6 +77,13 @@ def process_tile(current_tile, tile_id, segment, region,
                     r['LANDSAT_PRODUCT_ID']: util.ffind(r['FILE_LOC'])
                     for r in db_contrib_rec
                 }
+
+                # If any of the scenes can't be found, raise an exception.
+                if None in db_contrib_rec.values():
+                    logger.error("Error finding file for %s",
+                                 db_contrib_rec.keys())
+                    raise ArdTileException
+
                 logger.info("Contributing scene from db: %s", db_contrib_rec)
                 contributing_scenes.update(db_contrib_rec)
 
@@ -176,9 +185,10 @@ def process_tile(current_tile, tile_id, segment, region,
                          conf.workdir)
     )
 
-    process_output(conf.products, producers, outputs, tile_id, output_path)
-    util.process_checksums(globext=os.path.join(output_path,
-                                                tile_id+'*.tar'))
+    if process_output(conf.products, producers, outputs, conf.workdir, tile_id,
+                      output_path) != 0:
+        logger.error('Failed processing products.')
+        return "ERROR"
     if process_browse(producers['browse'], conf.workdir, tile_id,
                       output_path) != 0:
         logger.error('Failed to produce the browse image.')
@@ -562,34 +572,63 @@ def process_metadata(segment, stacking, tile_id, clip_extents, region,
     return filenames
 
 
-def process_output(products, producers, outputs, tile_id, output_path):
+def process_output(products, producers, outputs, workdir, tile_id,
+                   output_path):
     """Combine the Landsat mosaics into the .tar files."""
+    status = 0    # Initialize the return status.
+
     util.make_dirs(output_path)
 
     for product_request in sorted(products, reverse=True):
-        output_archive = os.path.join(output_path,
-                                      tile_id + '_' + product_request + '.tar')
-        logging.info('Create product %s', output_archive)
+        archive = tile_id + '_' + product_request + '.tar'
+        logging.info('Create product %s', archive)
         required = producers['package'][product_request]
         included = [o for o in outputs.values()
                     if any([r in o for r in required]) and isinstance(o, str)]
         included.append(outputs['XML'][product_request])
-        util.tar_archive(output_archive, included)
+
+        local_archive = os.path.join(workdir, archive)
+        output_archive = os.path.join(output_path, archive)
         output_xml = os.path.join(output_path, os.path.basename
                                   (outputs['XML'][product_request]))
-        util.shutil.copyfile(outputs['XML'][product_request], output_xml)
-    logger.info('    End zipping')
+        util.tar_archive(local_archive, included)
+
+        # Copy tarball to output directory.
+        shutil.copyfile(local_archive, output_archive)
+        shutil.copyfile(outputs['XML'][product_request], output_xml)
+
+    # Create checksums for the output tarballs, and compare with the files
+    # in the working directory.
+    if util.process_checksums(tile_id+'*.tar', workdir, output_path) == 'ERROR':
+        logger.error('Checksum processing failed.')
+
+        # Clean up output files upon failure.
+        for fullname in glob.glob(os.path.join(output_path, tile_id+'*')):
+            os.remove(fullname)
+
+        status = 1
+
+    # Remove local copies of product files.
+    for fullname in glob.glob(os.path.join(workdir, tile_id+'*.tar')):
+        os.remove(fullname)
+
+    if status == 0:
+        logger.info('    End product transfer')
+    else:
+        logger.info('    Product transfer failed.')
+
+    return status
 
 
 def process_browse(bands, workdir, tile_id, outpath):
     """Create a pyramid-layered RBG browse file for EE."""
     logger.info('     Start processing for BROWSE')
 
-    browse_filename = os.path.join(outpath, tile_id + '.tif')
-
-    if os.path.exists(browse_filename):
-        logger.warning("Skip previously generated result %s", browse_filename)
-        return browse_filename
+    output_browse_filename = os.path.join(outpath, tile_id + '.tif')
+    if os.path.exists(output_browse_filename):
+        logger.warning("Skip previously generated result %s",
+                       output_browse_filename)
+        return output_browse_filename
 
     bands = {k: util.ffind(workdir, tile_id, tile_id + '_' + v + '.tif')
              for k, v in bands.items()}
@@ -611,6 +650,7 @@ def process_browse(bands, workdir, tile_id, outpath):
         return results['status']
 
     # apply compression
+    browse_filename = os.path.join(workdir, tile_id + '.tif')
     comp_cmd = 'gdal_translate -co COMPRESS=JPEG -co PHOTOMETRIC=YCBCR {} {}'
     results = util.execute_cmd(comp_cmd.format(temp_filename2,
                                                browse_filename))
@@ -621,7 +661,7 @@ def process_browse(bands, workdir, tile_id, outpath):
                        'Trying again.')
         time.sleep(10)
         results = util.execute_cmd(comp_cmd.format(temp_filename2,
-                                               browse_filename))
+                                                   browse_filename))
         if results['status'] != 0:
             return results['status']
 
@@ -638,12 +678,21 @@ def process_browse(bands, workdir, tile_id, outpath):
         if results['status'] != 0:
             return results['status']
 
-    util.remove(temp_filename1, temp_filename2, browse_filename + '.aux.xml')
+    # Copy the browse to the output location, and verify using checksums.
+    shutil.copyfile(browse_filename, output_browse_filename)
+    if (util.checksum_md5(browse_filename) !=
+        util.checksum_md5(output_browse_filename)):
+        logger.warning('%s checksums do not match.',
+                       os.path.basename(browse_filename))
+        os.remove(output_browse_filename)
+        return 1
+    else:
+        logger.info('%s checksums match.', os.path.basename(browse_filename))
+
+    util.remove(temp_filename1, temp_filename2, browse_filename + '.aux.xml',
+                browse_filename)
 
     logger.info('    End building browse.')
-    if not os.path.exists(browse_filename):
-        logger.error('Processing failed to generate desired output: %s',
-                     browse_filename)
     return 0
 
 
