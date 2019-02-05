@@ -707,15 +707,12 @@ def process_segment(segment, output_path, conf):
         except ArdTileNotNeededException:
             logger.warning('Lineage file found 0 contributing scenes,'
                            ' set to NOT NEEDED')
-            tile_state = 'NOT NEEDED'
         except ArdTileException:
             logger.exception('Error caught while processing tile %s !',
                              current_tile)
-            tile_state = 'ERROR'
         except Exception:
             logger.exception('Unexpected error processing tile %s !',
                              current_tile)
-            tile_state = 'ERROR'
 
         # Remove the temporary work directory,
         # but keep adjacent scenes for other tiles
@@ -723,14 +720,6 @@ def process_segment(segment, output_path, conf):
             logger.info('    Cleanup: Removing temp directory: %s ...',
                         os.path.join(conf.workdir, tile_id))
             util.remove(os.path.join(conf.workdir, tile_id))
-
-
-        if tile_state in ('ERROR', 'NOT NEEDED'):
-            scene_state = tile_state
-            # update PROCESSING_STATE in ARD_PROCESSED_SCENES
-            db.update_scene_state(db.connect(conf.connstr),
-                                  segment['LANDSAT_PRODUCT_ID'], scene_state)
-            return scene_state
 
     scene_state = "COMPLETE"
     # update PROCESSING_STATE in ARD_PROCESSED_SCENES
