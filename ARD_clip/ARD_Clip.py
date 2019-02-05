@@ -567,18 +567,19 @@ def process_output(products, producers, outputs, tile_id, output_path):
     util.make_dirs(output_path)
 
     for product_request in sorted(products, reverse=True):
-        output_archive = os.path.join(output_path,
-                                      tile_id + '_' + product_request + '.tar')
-        logging.info('Create product %s', output_archive)
+        archive = tile_id + '_' + product_request + '.tar'
+        logging.info('Create product %s', archive)
         required = producers['package'][product_request]
         included = [o for o in outputs.values()
                     if any([r in o for r in required]) and isinstance(o, str)]
         included.append(outputs['XML'][product_request])
-        util.tar_archive(output_archive, included)
+        util.tar_archive(archive, included)
+        output_archive = os.path.join(output_path, archive)
+        util.shutil.copyfile(archive, output_archive)
         output_xml = os.path.join(output_path, os.path.basename
                                   (outputs['XML'][product_request]))
         util.shutil.copyfile(outputs['XML'][product_request], output_xml)
-    logger.info('    End zipping')
+    logger.info('    End product transfer')
 
 
 def process_browse(bands, workdir, tile_id, outpath):
