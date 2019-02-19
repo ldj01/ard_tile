@@ -75,6 +75,13 @@ def process_tile(current_tile, tile_id, segment, region,
                     r['LANDSAT_PRODUCT_ID']: util.ffind(r['FILE_LOC'])
                     for r in db_contrib_rec
                 }
+
+                # If any of the scenes can't be found, raise an exception.
+                if None in db_contrib_rec.values():
+                    logger.error("Error finding file for %s",
+                                 db_contrib_rec.keys())
+                    raise ArdTileException
+
                 logger.info("Contributing scene from db: %s", db_contrib_rec)
                 contributing_scenes.update(db_contrib_rec)
 
@@ -176,9 +183,9 @@ def process_tile(current_tile, tile_id, segment, region,
                          conf.workdir)
     )
 
-    process_output(conf.products, producers, outputs, tile_id, output_path)
-    if util.process_checksums(tile_id+'*.tar', output_path) == 'ERROR':
-        logger.error('Checksum processing failed.')
+    if process_output(conf.products, producers, outputs, conf.workdir, tile_id,
+                      output_path) != 0:
+        logger.error('Failed processing products.')
         return "ERROR"
     if process_browse(producers['browse'], conf.workdir, tile_id,
                       output_path) != 0:
@@ -563,7 +570,8 @@ def process_metadata(segment, stacking, tile_id, clip_extents, region,
     return filenames
 
 
-def process_output(products, producers, outputs, tile_id, output_path):
+def process_output(products, producers, outputs, workdir, tile_id,
+                   output_path):
     """Combine the Landsat mosaics into the .tar files."""
     util.make_dirs(output_path)
 
@@ -574,13 +582,25 @@ def process_output(products, producers, outputs, tile_id, output_path):
         included = [o for o in outputs.values()
                     if any([r in o for r in required]) and isinstance(o, str)]
         included.append(outputs['XML'][product_request])
-        util.tar_archive(archive, included)
+
+        local_archive = os.path.join(workdir, archive)
         output_archive = os.path.join(output_path, archive)
-        util.shutil.copyfile(archive, output_archive)
         output_xml = os.path.join(output_path, os.path.basename
                                   (outputs['XML'][product_request]))
+        util.tar_archive(local_archive, included)
+        util.shutil.copyfile(local_archive, output_archive)
         util.shutil.copyfile(outputs['XML'][product_request], output_xml)
+
+    if util.process_checksums(tile_id+'*.tar', workdir, output_path) == 'ERROR':
+        logger.error('Checksum processing failed.')
+        return 1
+
+    # Remove local copies of product files.
+    for fullname in glob.glob(os.path.join(workdir, tile_id+'*.tar')
+        os.remove(fullname)
+
     logger.info('    End product transfer')
+    return 0
 
 
 def process_browse(bands, workdir, tile_id, outpath):
@@ -645,10 +665,15 @@ def process_browse(bands, workdir, tile_id, outpath):
 
     # Copy the browse to the output location, and verify using checksums.
     util.shutil.copyfile(browse_filename, output_browse_filename)
-    if checksum_md5(browse_filename) != checksum_md5(output_browse_filename):
-        logger.warning('%s checksums do not match.', browse_filename)
+    if (util.checksum_md5(browse_filename) !=
+        util.checksum_md5(output_browse_filename)):
+        logger.warning('%s checksums do not match.',
+                       os.path.basename(browse_filename))
         return 1
+    else:
+        logger.info('%s checksums match.', os.path.basename(browse_filename))
 
+    os.remove(browse_filename)
     logger.info('    End building browse.')
     return 0
 
