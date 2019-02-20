@@ -12,7 +12,7 @@ import tarfile
 import subprocess
 
 
-logger = logging.getLogger('ARD_clip')
+logger = logging.getLogger()
 
 
 class L2pgsLoggingFilter(logging.Filter):
