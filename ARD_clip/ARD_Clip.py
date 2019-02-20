@@ -106,7 +106,7 @@ def process_tile(current_tile, tile_id, segment, region,
         except Exception:
             logger.exception('Error staging input data for %s: %s',
                              product_id, tar_file_location)
-            raise ArdTileException
+            raise ArdSceneException
 
     logger.info('Starting to build tile: %s', tile_id)
 
@@ -654,7 +654,13 @@ class ArdTileNotNeededException(Exception):
 
 
 class ArdTileException(Exception):
-    """An unrecoverable error has occurred."""
+    """An unrecoverable error has occurred while processing a tile."""
+
+    pass
+
+
+class ArdSceneException(Exception):
+    """An error has occurred while working with scene data."""
 
     pass
 
@@ -697,6 +703,7 @@ def process_segment(segment, output_path, conf):
                               segment['LANDSAT_PRODUCT_ID'], scene_state)
         return scene_state
 
+    tiling_error_encountered = 0
     for current_tile in hv_tiles:
         try:
             tile_id = landsat.generate_tile_id(segment['LANDSAT_PRODUCT_ID'],
@@ -704,15 +711,22 @@ def process_segment(segment, output_path, conf):
                                                conf.collection, conf.version)
             tile_state = process_tile(current_tile, tile_id, segment, region,
                                       tile_scenes, output_path, conf)
+            if tile_state == 'ERROR':
+                tiling_error_encountered = 1
         except ArdTileNotNeededException:
             logger.warning('Lineage file found 0 contributing scenes,'
                            ' set to NOT NEEDED')
         except ArdTileException:
-            logger.exception('Error caught while processing tile %s !',
+            logger.exception('Error caught while processing tile %s!',
                              current_tile)
+        except ArdSceneException:
+            logger.exception('Error caught while processing scene %s!',
+                             segment['LANDSAT_PRODUCT_ID'])
+            tiling_error_encountered = 1
         except Exception:
-            logger.exception('Unexpected error processing tile %s !',
+            logger.exception('Unexpected error processing tile %s!',
                              current_tile)
+            tiling_error_encountered = 1
 
         # Remove the temporary work directory,
         # but keep adjacent scenes for other tiles
@@ -721,7 +735,14 @@ def process_segment(segment, output_path, conf):
                         os.path.join(conf.workdir, tile_id))
             util.remove(os.path.join(conf.workdir, tile_id))
 
-    scene_state = "COMPLETE"
+    # If no tiling errors were encountered that may call for a retry,
+    # we're done with this scene.  Otherwise, mark the scene for a
+    # retry so that failed tiles can be reattempted.
+    if not tiling_error_encountered:
+        scene_state = "COMPLETE"
+    else:
+        scene_state = "ERROR"
+
     # update PROCESSING_STATE in ARD_PROCESSED_SCENES
     db.update_scene_state(db.connect(conf.connstr),
                           segment['LANDSAT_PRODUCT_ID'], scene_state)
