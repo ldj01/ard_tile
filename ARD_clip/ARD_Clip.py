@@ -3,6 +3,7 @@
 import os
 import logging
 import time
+import glob
 
 import db
 import util
@@ -596,7 +597,7 @@ def process_output(products, producers, outputs, workdir, tile_id,
         return 1
 
     # Remove local copies of product files.
-    for fullname in glob.glob(os.path.join(workdir, tile_id+'*.tar')
+    for fullname in glob.glob(os.path.join(workdir, tile_id+'*.tar')):
         os.remove(fullname)
 
     logger.info('    End product transfer')
@@ -661,8 +662,6 @@ def process_browse(bands, workdir, tile_id, outpath):
         if results['status'] != 0:
             return results['status']
 
-    util.remove(temp_filename1, temp_filename2, browse_filename + '.aux.xml')
-
     # Copy the browse to the output location, and verify using checksums.
     util.shutil.copyfile(browse_filename, output_browse_filename)
     if (util.checksum_md5(browse_filename) !=
@@ -673,7 +672,9 @@ def process_browse(bands, workdir, tile_id, outpath):
     else:
         logger.info('%s checksums match.', os.path.basename(browse_filename))
 
-    os.remove(browse_filename)
+    util.remove(temp_filename1, temp_filename2, browse_filename + '.aux.xml',
+                browse_filename)
+
     logger.info('    End building browse.')
     return 0
 
