@@ -230,7 +230,7 @@ def ffind(*paths):
 
     """
     search = os.path.join(*paths)
-    logger.info('Find files: %s', search)
+    logger.debug('Find files: %s', search)
     return glob.glob(search).pop()
 
 
